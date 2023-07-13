@@ -17,11 +17,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<ApplicationDbContext>(option => 
-            option.UseSqlServer(configuration.GetConnectionString("MsSQLConnection"))
+            option.UseSqlServer(configuration.GetConnectionString("MsSQLConnection"), b => b.UseHierarchyId())
             .UseExceptionProcessor());
         
         #region Identity
-        services.AddIdentityCore<User>(options =>
+        services.AddIdentity<User, Role>(options =>
         {
             options.SignIn.RequireConfirmedAccount = true;
 
@@ -64,23 +64,23 @@ public static class DependencyInjection
             options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
             options.User.RequireUniqueEmail = false;
         }).AddEntityFrameworkStores<ApplicationDbContext>();
+
+
         #endregion
 
         #region Entity
         services.AddTransient<IApplicationDbContext, ApplicationDbContext>();
         services.AddTransient<IUnitOfWork, UnitOfWork>();
 
-
+        services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
-        services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IServicePackageRepository, ServicePackageRepository>();
         services.AddScoped<IServiceRepository, ServiceRepository>();
         services.AddScoped<IVoucherRepository, VoucherRepository>();
         services.AddScoped<IVoucherTypeRepository, VoucherTypeRepository>();
         services.AddScoped<IExpiredDateExtensionRepository, ExpiredDateExtensionRepository>();
-
 
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IUserService, UserService>();

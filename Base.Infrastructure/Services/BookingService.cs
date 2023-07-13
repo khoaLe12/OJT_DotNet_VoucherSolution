@@ -1,12 +1,12 @@
 ﻿using Base.Core.Application;
+using Base.Core.Common;
 using Base.Core.Entity;
-using Base.Core.Identity;
-using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
-using System.Diagnostics.Contracts;
 using System.Linq.Expressions;
 
 namespace Base.Infrastructure.Services;
@@ -20,6 +20,113 @@ internal class BookingService : IBookingService
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+    }
+
+    public async Task<ServiceResponse> PatchUpdate(int bookingId, JsonPatchDocument<Booking> patchDoc, ModelStateDictionary ModelState)
+    {
+        var existedBooking = await _unitOfWork.Bookings.FindAsync(bookingId);
+        if(existedBooking == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found Booking"
+            };
+        }
+
+        Action<JsonPatchError> errorHandler = (error) =>
+        {
+            var operation = patchDoc.Operations.FirstOrDefault(op => op.path == error.AffectedObject.ToString());
+            if (operation != null)
+            {
+                var propertyName = operation.path.Split('/').Last();
+                ModelState.AddModelError(propertyName, error.ErrorMessage);
+            }
+            else
+            {
+                ModelState.AddModelError("", error.ErrorMessage);
+            }
+        };
+
+        patchDoc.ApplyTo(existedBooking, errorHandler);
+        if (!ModelState.IsValid)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ModelState.ToString(),
+            };
+        }
+
+        if(await _unitOfWork.SaveChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Update Successfully"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Update Fail"
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> UpdateBooking(Booking? updatedBooking, int bookingId)
+    {
+        if(updatedBooking == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Invalid: Update Information are null"
+            };
+        }
+
+        var existedBooking = await _unitOfWork.Bookings.FindAsync(bookingId);
+        if(existedBooking == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found Booking"
+            };
+        }
+
+        if (_currentUserService.UserId != existedBooking.SalesEmployeeId)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "You can not update booking that is not yours"
+            };
+        }
+
+        updatedBooking.Id = bookingId;
+        updatedBooking.SalesEmployeeId = existedBooking.SalesEmployeeId;
+        updatedBooking.CustomerId = existedBooking.CustomerId;
+        _unitOfWork.Bookings.Update(updatedBooking);
+
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Update successfully"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Update Fail"
+            };
+        }
     }
 
     public async Task<Booking?> AddNewBooking(Booking? booking, Guid? CustomerId, int? ServicePackageId, IEnumerable<int>? VoucherIds)
@@ -44,27 +151,47 @@ internal class BookingService : IBookingService
                         }
                         else
                         {
-                            return null;
+                            throw new ArgumentNullException(null, "Can not find Voucher");
                         }
                     }
                     booking.Vouchers = voucherList;
                 }
 
-                if (salesEmployee != null && customer != null && servicePackage != null)
+                if(salesEmployee == null)
                 {
-                    booking.SalesEmployee = salesEmployee;
-                    booking.Customer = customer;
-                    booking.ServicePackage = servicePackage;
-                    booking.BookingDate = DateTime.Now;
-
-                    await _unitOfWork.Bookings.AddAsync(booking);
-                    if (await _unitOfWork.SaveChangesAsync())
-                    {
-                        return booking;
-                    }
+                    throw new ArgumentNullException(null, "Can not find Employee information");
                 }
+
+                if(customer == null)
+                {
+                    throw new ArgumentNullException(null, "Can not find Customer information");
+                }
+
+                if(servicePackage == null)
+                {
+                    throw new ArgumentNullException(null, "Can not find Service Package");
+                }
+
+                booking.SalesEmployee = salesEmployee;
+                booking.Customer = customer;
+                booking.ServicePackage = servicePackage;
+                booking.BookingDate = DateTime.Now;
+
+                await _unitOfWork.Bookings.AddAsync(booking);
+                if (await _unitOfWork.SaveChangesAsync())
+                {
+                    return booking;
+                }
+                else
+                {
+                    // Log Cancellation
+                }
+                return null;
             }
-            return null;
+            else
+            {
+                throw new ArgumentNullException(null, "Some Informations are null");
+            }
         }
         catch (InvalidOperationException)
         {
@@ -74,14 +201,7 @@ internal class BookingService : IBookingService
 
     public IEnumerable<Booking>? GetAllBookings()
     {
-        try
-        {
-            return _unitOfWork.Bookings.FindAll();
-        }
-        catch (Exception)
-        {
-            throw;
-        }
+        return _unitOfWork.Bookings.FindAll();
     }
 
     public async Task<Booking?> GetBookingById(int id)
@@ -95,5 +215,27 @@ internal class BookingService : IBookingService
             .Include(nameof(Booking.ServicePackage) + "." + nameof(ServicePackage.Services))
             .Include(nameof(Booking.Vouchers) + "." + nameof(Voucher.VoucherType))
             .FirstOrDefaultAsync();
+    }
+
+    public async Task<IEnumerable<Booking>?> GetAllBookingOfUser()
+    {
+        var userId = _currentUserService.UserId;
+        var user = await _unitOfWork.Users.FindAsync(userId);
+        if(user == null)
+        {
+            throw new ArgumentNullException(null, "User Not Found");
+        }
+        return await _unitOfWork.Bookings.Get(b => b.SalesEmployeeId == userId).AsNoTracking().ToListAsync();
+    }
+
+    public async Task<IEnumerable<Booking>?> GetAllBookingOfCustomer()
+    {
+        var userId = _currentUserService.UserId;
+        var user = await _unitOfWork.Customers.FindAsync(userId);
+        if (user == null)
+        {
+            throw new ArgumentNullException(null, "Customer Not Found");
+        }
+        return await _unitOfWork.Bookings.Get(b => b.CustomerId == userId).AsNoTracking().ToListAsync();
     }
 }

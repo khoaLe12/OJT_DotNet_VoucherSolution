@@ -2,22 +2,16 @@
 using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.Identity;
-using Base.Core.ViewModel;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
+using Npgsql.TypeMapping;
 
 namespace Base.Infrastructure.Data;
 
 public interface IApplicationDbContext
 {
     public DbSet<Customer> Customers { get; set; }
-    public DbSet<User> Users { get; set; }
-    public DbSet<Role> Roles { get; set; }
     public DbSet<Booking> Bookings { get; set; }
     public DbSet<ServicePackage> ServicePackages { get; set; }
     public DbSet<Service> Services { get; set; }
@@ -27,7 +21,7 @@ public interface IApplicationDbContext
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = new CancellationToken());
 }
 
-public class ApplicationDbContext : DbContext, IApplicationDbContext
+public class ApplicationDbContext : IdentityDbContext<User, Role, Guid, IdentityUserClaim<Guid>, IdentityUserRole<Guid>, IdentityUserLogin<Guid>, RoleClaim, IdentityUserToken<Guid>>, IApplicationDbContext
 {
     private readonly ICurrentUserService _currentUserService;
 	public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, ICurrentUserService currentUserService) : base(options)
@@ -51,8 +45,6 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     }
 
     public DbSet<Customer> Customers { get; set; }
-    public DbSet<User> Users { get; set; }
-	public DbSet<Role> Roles { get; set; }
     public DbSet<Booking> Bookings { get; set; }
     public DbSet<ServicePackage> ServicePackages { get; set; }
     public DbSet<Service> Services { get; set; }
@@ -62,6 +54,27 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
+        base.OnModelCreating(builder);
+
+        builder.Entity<User>(entity =>
+        {
+            entity.HasMany(u => u.Roles).WithMany(r => r.Users)
+                .UsingEntity<IdentityUserRole<Guid>>();
+            entity.Property(u => u.PathFromRootManager)
+                .HasDefaultValueSql("hierarchyid::Parse('/')");
+        });
+
+        builder.Entity<RoleClaim>(entity =>
+        {
+            /*Using Fluent API to create new shadow property that hold information of update DateTime
+            This Property will not be showed on model
+            But we can change it value by using ChangeTracker
+            entity.Property<DateTime>("lastUpdate");*/
+            entity.HasOne(rc => rc.Role)
+                .WithMany(r => r.RoleClaims)
+                .HasForeignKey(rc => rc.RoleId);
+        });
+
         builder.Entity<Customer>(entity =>
         {
             entity.HasIndex(e => e.CitizenId)
@@ -74,20 +87,6 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                 .IsRequired();
             entity.Property(e => e.UserName)
                 .IsRequired(false);
-        });
-
-        builder.Entity<User>(entity =>
-        {
-            entity.HasOne(u => u.SalesManager).WithMany(u => u.SalesEmployee)
-                .HasForeignKey(u => u.ManagerId)
-                .OnDelete(DeleteBehavior.NoAction);
-            entity.HasMany(u => u.Roles).WithMany(r => r.Users)
-                .UsingEntity(
-                    "UserRoles",
-                    l => l.HasOne(typeof(Role)).WithMany().HasForeignKey("RoleId").HasPrincipalKey(nameof(Role.Id)),
-                    r => r.HasOne(typeof(User)).WithMany().HasForeignKey("UserId").HasPrincipalKey(nameof(User.Id)),
-                    j => j.HasKey("UserId", "RoleId")
-                );
         });
 
         builder.Entity<Booking>(entity =>
@@ -154,6 +153,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                 .OnDelete(DeleteBehavior.NoAction);
         });
 
-        base.OnModelCreating(builder);
+        builder.Ignore<IdentityUserClaim<Guid>>();
+        builder.Ignore<IdentityUserLogin<Guid>>();
+        builder.Ignore<IdentityUserToken<Guid>>();
     }
 }

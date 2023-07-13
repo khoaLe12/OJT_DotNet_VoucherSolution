@@ -1,13 +1,15 @@
-﻿using Microsoft.AspNetCore.Identity;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Base.Core.Entity;
+using Microsoft.AspNetCore.Identity;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Security.Claims;
 
-namespace Base.Core.Entity;
+namespace Base.Core.Identity;
 
-public class Role : IdentityRole<int>
+public class Role : IdentityRole<Guid>
 {
+    [Required]
+    public bool IsManager { get; set; } = false;
     public IEnumerable<User>? Users { get; set; }
+    public virtual IEnumerable<RoleClaim>? RoleClaims { get; set; }
 }

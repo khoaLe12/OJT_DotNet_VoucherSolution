@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -11,6 +12,7 @@ public class ResponseCustomerInformationVM
 {
     public Guid Id { get; set; }
     public string? Name { get; set; }
+    public string? CitizenId { get; set; }
     public string? Email { get; set; }
     public string? NormalizedEmail { get; set; }
     public bool EmailConfirmed { get; set; }
@@ -19,7 +21,6 @@ public class ResponseCustomerInformationVM
     public bool TwoFactorEnabled { get; set; }
     public DateTimeOffset? LockoutEnd { get; set; }
     public bool LockoutEnabled { get; set; }
-    public string? CitizenId { get; set; }
     public IEnumerable<ResponseBookingVM>? Bookings { get; set; }
     public IEnumerable<ResponseVoucherVM>? Vouchers { get; set; }
 }
@@ -27,6 +28,7 @@ public class ResponseCustomerInformationVM
 public class ResponseUserInformationVM
 {
     public Guid Id { get; set; }
+    public string? Name { get; set; }
     public string? CitizenId { get; set; }
     public string? UserName { get; set; }
     public string? NormalizedUserName { get; set; }
@@ -45,8 +47,16 @@ public class ResponseUserInformationVM
 
 public class ResponseRoleVM
 {
-    public int? Id { get; set; }
+    public Guid Id { get; set; }
     public string? NormalizedName { get; set; }
+    public bool IsManager { get; set; }
+    public IEnumerable<ResponseRoleClaimVM>? RoleClaims { get; set; }
+}
+
+public class ResponseRoleClaimVM
+{
+    public int Id { get; set; }
+    public string? ClaimValue { get; set; }
 }
 
 public class ResponseCustomerVM

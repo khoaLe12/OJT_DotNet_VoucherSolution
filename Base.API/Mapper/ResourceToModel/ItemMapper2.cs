@@ -3,6 +3,8 @@ using Base.Core.Entity;
 using Base.Core.Enum;
 using Base.Core.Identity;
 using Base.Core.ViewModel;
+using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
 
 namespace Base.API.Mapper.ResourceToModel;
 
@@ -45,7 +47,10 @@ public class ItemMapper2 : Profile
 
         CreateMap<ExpiredDateExtension, ResponseExpiredDateExtensionVM>();
 
-        CreateMap<Role, ResponseRoleVM>();
+        CreateMap<Role, ResponseRoleVM>()
+            .ForMember(dest => dest.RoleClaims, opt => opt.MapFrom(src => src.RoleClaims));
+
+        CreateMap<RoleClaim, ResponseRoleClaimVM>();
 
         //This mapping is used for Booking entity only
         CreateMap<Voucher, ResponseVoucherForBookingVM>()

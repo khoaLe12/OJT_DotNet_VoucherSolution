@@ -12,9 +12,9 @@ public interface IUnitOfWork
     IVoucherTypeRepository VoucherTypes { get; }
     IBookingRepository Bookings { get; }
     ICustomerRepository Customers { get; }
-    IRoleRepository Roles { get; }
     IUserRepository Users { get; }
     IExpiredDateExtensionRepository ExpiredDateExtensions { get; }
+    IRoleRepository Roles { get; }
     Task<bool> SaveChangesAsync();
 }
 
@@ -29,9 +29,9 @@ public class UnitOfWork : IUnitOfWork, IDisposable
     public IVoucherTypeRepository VoucherTypes { get; private set; }
     public IBookingRepository Bookings { get; private set; }
     public ICustomerRepository Customers { get; private set; }
-    public IRoleRepository Roles { get; private set; }
     public IUserRepository Users { get; private set; }
-    public IExpiredDateExtensionRepository ExpiredDateExtensions { get; }
+    public IExpiredDateExtensionRepository ExpiredDateExtensions { get; private set; }
+    public IRoleRepository Roles { get; private set; }
 
     public UnitOfWork(ApplicationDbContext applicationDbContext,
         //ILogger logger,
@@ -41,9 +41,9 @@ public class UnitOfWork : IUnitOfWork, IDisposable
         IVoucherTypeRepository voucherTypes, 
         IBookingRepository bookings, 
         ICustomerRepository customers, 
-        IRoleRepository roles, 
         IUserRepository users, 
-        IExpiredDateExtensionRepository expiredDateExtensionRepository)
+        IExpiredDateExtensionRepository expiredDateExtensionRepository,
+        IRoleRepository roleRepository)
     {
         _applicationDbContext = applicationDbContext;
         //_logger = logger
@@ -53,9 +53,9 @@ public class UnitOfWork : IUnitOfWork, IDisposable
         VoucherTypes = voucherTypes;
         Bookings = bookings;
         Customers = customers;
-        Roles = roles;
         Users = users;
         ExpiredDateExtensions = expiredDateExtensionRepository;
+        Roles = roleRepository;
     }
 
     public async Task<bool> SaveChangesAsync()

@@ -14,5 +14,5 @@ public class CurrentUserService : ICurrentUserService
 
     public Guid UserId => 
         Guid.Parse(_httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? 
-            throw new InvalidOperationException("Login User not found or User is not logged in!!!"));
+            throw new InvalidOperationException("User is not logged in"));
 }

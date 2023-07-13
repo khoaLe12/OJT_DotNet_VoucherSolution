@@ -1,4 +1,7 @@
-﻿using Base.Core.Entity;
+﻿using Base.Core.Common;
+using Base.Core.Entity;
+using Microsoft.AspNetCore.JsonPatch;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,4 +15,6 @@ public interface IExpiredDateExtensionService
     Task<ExpiredDateExtension?> AddNewExpiredDateExtension(ExpiredDateExtension? expiredDateExtension, int? VoucherId);
     IEnumerable<ExpiredDateExtension>? GetAllExpiredDateExtensions();
     Task<ExpiredDateExtension?> GetExpiredDateExtensionById(int id);
+    //Task<ServiceResponse> PatchUpdate(int id, JsonPatchDocument<ExpiredDateExtension> patchDoc, ModelStateDictionary ModelState);
+    Task<ServiceResponse> UpdateVoucherExtension(ExpiredDateExtension? updatedExpiredDateExtension, int id);
 }

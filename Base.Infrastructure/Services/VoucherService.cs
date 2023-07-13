@@ -1,15 +1,12 @@
 ﻿using Base.Core.Application;
+using Base.Core.Common;
 using Base.Core.Entity;
-using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
+using Microsoft.AspNetCore.JsonPatch;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Base.Infrastructure.Services;
 
@@ -22,6 +19,104 @@ internal class VoucherService : IVoucherService
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+    }
+
+    public async Task<ServiceResponse> PatchUpdate(int voucherId, JsonPatchDocument<Voucher> patchDoc, ModelStateDictionary ModelState)
+    {
+        var existedVoucher = await _unitOfWork.Vouchers.FindAsync(voucherId);
+        if (existedVoucher == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found"
+            };
+        }
+
+        Action<JsonPatchError> errorHandler = (error) =>
+        {
+            var operation = patchDoc.Operations.FirstOrDefault(op => op.path == error.AffectedObject.ToString());
+            if (operation != null)
+            {
+                var propertyName = operation.path.Split('/').Last();
+                ModelState.AddModelError(propertyName, error.ErrorMessage);
+            }
+            else
+            {
+                ModelState.AddModelError("", error.ErrorMessage);
+            }
+        };
+
+        patchDoc.ApplyTo(existedVoucher, errorHandler);
+        if (!ModelState.IsValid)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ModelState.ToString(),
+            };
+        }
+
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Update Successfully"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Update Fail"
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> UpdateVoucher(Voucher? updatedVoucher, int voucherId)
+    {
+        if (updatedVoucher == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Invalid: Update Information are null"
+            };
+        }
+
+        var existedVoucher = await _unitOfWork.Vouchers.FindAsync(voucherId);
+        if (existedVoucher == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found"
+            };
+        }
+        else
+        {
+            updatedVoucher.Id = voucherId;
+            _unitOfWork.Vouchers.Update(updatedVoucher);
+
+            if (await _unitOfWork.SaveChangesAsync())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "Update successfully"
+                };
+            }
+            else
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Update Fail"
+                };
+            }
+        }
     }
 
     public async Task<Voucher?> AddNewVoucher(Voucher? voucher, Guid? CustomerId, int? VoucherTypeId)
@@ -61,6 +156,28 @@ internal class VoucherService : IVoucherService
     public IEnumerable<Voucher>? GetAllVoucher()
     {
         return _unitOfWork.Vouchers.FindAll();
+    }
+
+    public async Task<IEnumerable<Voucher>?> GetAllVoucherOfUser()
+    {
+        var userId = _currentUserService.UserId;
+        var user = await _unitOfWork.Users.FindAsync(userId);
+        if (user == null)
+        {
+            throw new ArgumentNullException(null, "User Not Found");
+        }
+        return await _unitOfWork.Vouchers.Get(b => b.SalesEmployeeId == userId).AsNoTracking().ToListAsync();
+    }
+
+    public async Task<IEnumerable<Voucher>?> GetAllVoucherOfCustomer()
+    {
+        var userId = _currentUserService.UserId;
+        var user = await _unitOfWork.Customers.FindAsync(userId);
+        if (user == null)
+        {
+            throw new ArgumentNullException(null, "Customer Not Found");
+        }
+        return await _unitOfWork.Vouchers.Get(b => b.CustomerId == userId).AsNoTracking().ToListAsync();
     }
 
     public async Task<Voucher?> GetVoucherById(int id)

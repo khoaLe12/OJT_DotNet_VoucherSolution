@@ -1,8 +1,11 @@
 ﻿using Base.Core.Application;
+using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
+using Microsoft.AspNetCore.JsonPatch;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -24,6 +27,178 @@ internal class ExpiredDateExtensionService : IExpiredDateExtensionService
         _currentUserService = currentUserService;
     }
 
+    /*public async Task<ServiceResponse> PatchUpdate(int id, JsonPatchDocument<ExpiredDateExtension> patchDoc, ModelStateDictionary ModelState)
+    {
+        var existedVoucherExtension = await _unitOfWork.ExpiredDateExtensions.FindAsync(id);
+        
+        if (existedVoucherExtension == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found Voucher Extension"
+            };
+        }
+
+        var existedVoucher = await _unitOfWork.Vouchers.FindAsync(existedVoucherExtension.VoucherId);
+
+        if (existedVoucher == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found Voucher"
+            };
+        }
+
+        Action<JsonPatchError> errorHandler = (error) =>
+        {
+            var operation = patchDoc.Operations.FirstOrDefault(op => op.path == error.AffectedObject.ToString());
+            if (operation != null)
+            {
+                var propertyName = operation.path.Split('/').Last();
+                ModelState.AddModelError(propertyName, error.ErrorMessage);
+            }
+            else
+            {
+                ModelState.AddModelError("", error.ErrorMessage);
+            }
+        };
+
+        // Get Operation which update new expired date
+        Microsoft.AspNetCore.JsonPatch.Operations.Operation? updateExpiredDateOperation = 
+            patchDoc.Operations.Find(o => o.op == "replace" && o.path == "NewExpiredDate");
+        // Check Value
+        if (updateExpiredDateOperation != null)
+        {
+            var newDate = (DateTime)updateExpiredDateOperation.value;
+            if (newDate < existedVoucherExtension.OldExpiredDate)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "New Expired Date should not be less than Old Expired Date"
+                };
+            }
+        }
+
+        patchDoc.ApplyTo(existedVoucherExtension, errorHandler);
+        if (!ModelState.IsValid)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ModelState.ToString(),
+            };
+        }
+
+        // Check whether it could affect on Expired Date of Voucher
+        if (existedVoucher.ExpiredDate == existedVoucherExtension.OldExpiredDate)
+        {
+
+        }
+
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Update Successfully"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Update Fail"
+            };
+        }
+    }*/
+
+    public async Task<ServiceResponse> UpdateVoucherExtension(ExpiredDateExtension? updatedExpiredDateExtension, int id)
+    {
+        if (updatedExpiredDateExtension == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Invalid: Update Information are null"
+            };
+        }
+
+        var existedExpiredDateExtension = await _unitOfWork.ExpiredDateExtensions.FindAsync(id);
+        var voucher = await _unitOfWork.Vouchers.FindAsync(updatedExpiredDateExtension.VoucherId);
+
+        if (existedExpiredDateExtension == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found Voucher Extension"
+            };
+        }
+        if (voucher == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Can not found Voucher"
+            };
+        }
+        if (existedExpiredDateExtension.VoucherId != updatedExpiredDateExtension.VoucherId)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Voucher is not allowed to be changed"
+            };
+        }
+        if (_currentUserService.UserId != existedExpiredDateExtension.SalesEmployeeId)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "You can not update Voucher Extension that is not yours"
+            };
+        }
+
+        updatedExpiredDateExtension.Id = id;
+        updatedExpiredDateExtension.SalesEmployeeId = existedExpiredDateExtension.SalesEmployeeId;
+        updatedExpiredDateExtension.DateTime = existedExpiredDateExtension.DateTime;
+        updatedExpiredDateExtension.OldExpiredDate = existedExpiredDateExtension.OldExpiredDate;
+        if (updatedExpiredDateExtension.OldExpiredDate > updatedExpiredDateExtension.NewExpiredDate)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Updated Expired Date should not be less than old Expired Date"
+            };
+        }
+        if (voucher.ExpiredDate == existedExpiredDateExtension.NewExpiredDate)
+        {
+            voucher.ExpiredDate = updatedExpiredDateExtension.NewExpiredDate;
+        }
+
+        _unitOfWork.ExpiredDateExtensions.Update(updatedExpiredDateExtension);
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Update Voucher Extension successfully"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Update Voucher Extension Fail"
+            };
+        }
+    }
+
     public async Task<ExpiredDateExtension?> AddNewExpiredDateExtension(ExpiredDateExtension? expiredDateExtension, int? VoucherId)
     {
         try
@@ -40,7 +215,7 @@ internal class ExpiredDateExtensionService : IExpiredDateExtensionService
                         return null;
                     }
                     expiredDateExtension.OldExpiredDate = voucher.ExpiredDate;
-                    expiredDateExtension.ExtendedDateTime = DateTime.Now;
+                    expiredDateExtension.DateTime = DateTime.Now;
                     expiredDateExtension.SalesEmployee = salesEmployee;
                     expiredDateExtension.Voucher = voucher;
 

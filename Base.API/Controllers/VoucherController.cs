@@ -1,8 +1,10 @@
 ﻿using AutoMapper;
+using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.IService;
 using Duende.IdentityServer.Extensions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,23 +23,105 @@ namespace Base.API.Controllers
             _mapper = mapper;
         }
 
+        [HttpGet("User")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
+        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+        public async Task<IActionResult> GetAllVoucherOfUser()
+        {
+            try
+            {
+                var result = await _voucherService.GetAllVoucherOfUser();
+                if (result.IsNullOrEmpty() || result == null)
+                {
+                    return NotFound(new ServiceResponse
+                    {
+                        IsSuccess = true,
+                        Message = "empty"
+                    });
+                }
+                return Ok(_mapper.Map<IEnumerable<ResponseVoucherVM>>(result));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = ex.Message,
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = ex.Message,
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+        }
+
+        [HttpGet("Customer")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
+        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+        public async Task<IActionResult> GetAllVoucherOfCustomer()
+        {
+            try
+            {
+                var result = await _voucherService.GetAllVoucherOfCustomer();
+                if (result.IsNullOrEmpty() || result == null)
+                {
+                    return NotFound(new ServiceResponse
+                    {
+                        IsSuccess = true,
+                        Message = "empty"
+                    });
+                }
+                return Ok(_mapper.Map<IEnumerable<ResponseVoucherVM>>(result));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = ex.Message,
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = ex.Message,
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+        }
+
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(string))]
+        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
         public IActionResult GetAllVoucher()
         {
             var result = _voucherService.GetAllVoucher();
             if(result.IsNullOrEmpty() || result == null)
             {
-                return NotFound("No Voucher Found (Empty) !!!");
+                return NotFound(new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "empty"
+                });
             }
             return Ok(_mapper.Map<IEnumerable<ResponseVoucherVM>>(result));
         }
 
         [HttpGet("{VoucherId}", Name = nameof(GetVoucherById))]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ResponseVoucherVM))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(string))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(string))]
+        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
         public async Task<IActionResult> GetVoucherById(int VoucherId)
         {
             if (ModelState.IsValid)
@@ -45,16 +129,25 @@ namespace Base.API.Controllers
                 var result = await _voucherService.GetVoucherById(VoucherId);
                 if(result == null)
                 {
-                    return NotFound("No Voucher Found with the given id !!!");
+                    return NotFound(new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "No Voucher Found with the given id"
+                    });
                 }
                 return Ok(_mapper.Map<ResponseVoucherVM>(result));
             }
-            return BadRequest("Some properties are not valid !!!");
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Some properties are not valid"
+            });
         }
 
+        [Authorize(Policy = "SalesEmployee")]
         [HttpPost]
         [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseVoucherVM))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(string))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
         public async Task<IActionResult> AddNewVoucher([FromBody] VoucherVM resource)
         {
             try
@@ -71,13 +164,17 @@ namespace Base.API.Controllers
                             },
                             _mapper.Map<ResponseVoucherVM>(result));
                     }
-                    return BadRequest("Some errors happened");
+                    return BadRequest(new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Some errors happened"
+                    });
                 }
-                return BadRequest("Some properties are not valid !!!");
+                return BadRequest("Some properties are not valid");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(ex.ToString() + "\n\n Please Login First !!!!!");
+                return BadRequest(ex.ToString() + "\n\n Please Login First");
             }
         }
     }

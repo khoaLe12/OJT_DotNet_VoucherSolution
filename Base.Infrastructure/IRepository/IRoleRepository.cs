@@ -1,4 +1,4 @@
-﻿using Base.Core.Entity;
+﻿using Base.Core.Identity;
 using Base.Infrastructure.Data;
 using System;
 using System.Collections.Generic;
@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 
 namespace Base.Infrastructure.IRepository;
 
-public interface IRoleRepository : IBaseRepository<Role,int>
+public interface IRoleRepository : IBaseRepository<Role, Guid>
 {
-    Task<IEnumerable<Role>?> GetRolesByIds(List<int> roleIds);
 }

@@ -29,7 +29,7 @@ public class ExpiredDateExtension
     public Decimal Price { get; set; }
 
 
-    public DateTime ExtendedDateTime { get; set; }
+    public DateTime DateTime { get; set; }
     public DateTime OldExpiredDate { get; set; }
     public DateTime NewExpiredDate { get; set; }
 }

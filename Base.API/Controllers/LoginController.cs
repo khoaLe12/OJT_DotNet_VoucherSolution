@@ -14,14 +14,16 @@ namespace Base.API.Controllers
     {
         private readonly IUserService _userService;
         private readonly ICustomerService _customerService;
-        private readonly IJWTTokenService _jwtTokenService;
+        private readonly IJWTTokenService<User> _jwtTokenUserService;
+        private readonly IJWTTokenService<Customer> _jwtTokenCustomerService;
         private readonly IMapper _mapper;
-        public LoginController(IUserService userService, ICustomerService customerService, IJWTTokenService jwtTokenService, IMapper mapper)
+        public LoginController(IUserService userService, ICustomerService customerService, IJWTTokenService<User> jwtTokenUserService, IJWTTokenService<Customer> jwtTokenCustomerService, IMapper mapper)
         {
             _mapper = mapper;
             _userService = userService;
             _customerService = customerService;
-            _jwtTokenService = jwtTokenService;
+            _jwtTokenCustomerService = jwtTokenCustomerService;
+            _jwtTokenUserService = jwtTokenUserService;
         }
 
         [HttpPost]
@@ -36,7 +38,7 @@ namespace Base.API.Controllers
                 var result = await _userService.LoginUserAsync(resource);
                 if (result.IsSuccess)
                 {
-                    var tokenString = await _jwtTokenService.CreateToken(result.LoginUser!);
+                    var tokenString = await _jwtTokenUserService.CreateToken(result.LoginUser!);
                     if (tokenString != null)
                     {
                         return Ok(new AuthenticatedResponse {
@@ -52,7 +54,7 @@ namespace Base.API.Controllers
             }
             return BadRequest(new UserManagerResponse
             {
-                Message = "Some properties are not valid !!!"
+                Message = "Some properties are not valid"
             });
         }
 
@@ -68,7 +70,7 @@ namespace Base.API.Controllers
                 var result = await _customerService.LoginCustomerAsync(resource);
                 if (result.IsSuccess)
                 {
-                    var tokenString = _jwtTokenService.CreateToken(result.LoginCustomer!);
+                    var tokenString = await _jwtTokenCustomerService.CreateToken(result.LoginCustomer!);
                     if (tokenString != null)
                     {
                         return Ok(new AuthenticatedResponse {
@@ -84,7 +86,7 @@ namespace Base.API.Controllers
             }
             return BadRequest(new CustomerManagerResponse
             {
-                Message = "Some properties are not valid !!!"
+                Message = "Some properties are not valid"
             });
         }
     }

@@ -1,9 +1,11 @@
 ﻿using Base.Core.Application;
+using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
+using Duende.IdentityServer.Extensions;
 using EntityFramework.Exceptions.Common;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.JsonPatch;
@@ -33,14 +35,23 @@ internal class CustomerService : ICustomerService
 
     public async Task<CustomerManagerResponse> PatchUpdate(Guid userId, JsonPatchDocument<Customer> patchDoc, ModelStateDictionary ModelState)
     {
-        var customer = await _unitOfWork.Customers.FindAsync(userId);
+        var operations = patchDoc.Operations.Where(o => o.op != "replace" || o.path != "LockoutEnabled");
+        if (operations.IsNullOrEmpty())
+        {
+            return new CustomerManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Operation Not Supported"
+            };
+        }
 
+        var customer = await _unitOfWork.Customers.FindAsync(userId);
         if (customer == null)
         {
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Can not find Customer with the given Id !!!!"
+                Message = "Can not found"
             };
         }
 
@@ -80,7 +91,7 @@ internal class CustomerService : ICustomerService
         return new CustomerManagerResponse
         {
             IsSuccess = false,
-            Message = "Update fail at PatchUpdate method from UserService"
+            Message = "Update Fail"
         };
     }
 
@@ -93,7 +104,7 @@ internal class CustomerService : ICustomerService
                 return new CustomerManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Invalid: Update Information are null !!!"
+                    Message = "Invalid: Update Information are null"
                 };
             }
 
@@ -102,7 +113,7 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Customer has not found with the given Id !!!",
+                    Message = "Can not found",
                     IsSuccess = false
                 };
             }
@@ -129,7 +140,7 @@ internal class CustomerService : ICustomerService
                 return new CustomerManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Update Information Fail!!!"
+                    Message = "Update Information Fail"
                 };
             }
         }
@@ -138,13 +149,13 @@ internal class CustomerService : ICustomerService
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Update Information Fail!!!",
+                Message = "Update Information Fail",
                 Errors = new List<string>() { ex.Message }
             };
         }
         catch(UniqueConstraintException ex)
         {
-            List<string> errorList = new List<string>() { ex.Message };
+            List<string>? errorList = new List<string>() { ex.Message };
             if (ex.InnerException!.Message.Contains("IX_Customers_CitizenId"))
             {
                 errorList.Add("Citizen Id is already taken");
@@ -175,8 +186,17 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
+                    Message = "Invalid: Credentials are null",
                     IsSuccess = false,
-                    Message = "Invalid: Credentials are null !!!"
+                };
+            }
+
+            if (model.NewPassword != model.ConfirmPassword)
+            {
+                return new CustomerManagerResponse
+                {
+                    Message = "Confirm password does not match the password",
+                    IsSuccess = false,
                 };
             }
 
@@ -185,8 +205,8 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    IsSuccess = false,
-                    Message = "Customer has not found with the given Id !!!"
+                    Message = "Can not found",
+                    IsSuccess = false
                 };
             }
 
@@ -204,7 +224,7 @@ internal class CustomerService : ICustomerService
                 return new CustomerManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Password has not been updated !!!",
+                    Message = "Password has not been updated",
                     Errors = result.Errors.Select(e => e.Description)
                 };
             }
@@ -214,7 +234,7 @@ internal class CustomerService : ICustomerService
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Reset Password Fail!!!",
+                Message = "Password has not been updated",
                 Errors = new List<string>() { ex.Message }
             };
         }
@@ -226,7 +246,7 @@ internal class CustomerService : ICustomerService
         {
             return new CustomerManagerResponse
             {
-                Message = "Invalid: Credentials are null !!!",
+                Message = "Invalid: Credentials are null",
                 IsSuccess = false,
             };
         }
@@ -238,7 +258,7 @@ internal class CustomerService : ICustomerService
         {
             return new CustomerManagerResponse
             {
-                Message = "Customer not found with the given information !!!",
+                Message = "Customer not found with the given information",
                 IsSuccess = false
             };
         }
@@ -271,7 +291,7 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Invalid: Credentials are null !!!",
+                    Message = "Invalid: Credentials are null",
                     IsSuccess = false,
                 };
             }
@@ -280,7 +300,7 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "At least one of the informations CitizenId, Email and Phone Number are required !!!",
+                    Message = "At least one of the informations CitizenId, Email and Phone Number are required",
                     IsSuccess = false
                 };
             }
@@ -289,7 +309,7 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Confirm password does not match the password !!!",
+                    Message = "Confirm password does not match the password",
                     IsSuccess = false
                 };
             }

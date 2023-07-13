@@ -12,11 +12,12 @@ public interface IUserService
 {
     Task<UserManagerResponse> RegisterNewUserAsync(UserVM model);
     Task<UserManagerResponse> LoginUserAsync(LoginUserVM model);
-    Task<IEnumerable<Role>?> GetRolesByUserId(Guid id);
     IEnumerable<User>? GetAllUser();
-    IEnumerable<User>? GetAllManagedUser();
+    Task<IEnumerable<User>?> GetAllManagedUser();
+    Task<IEnumerable<User>?> GetAllManager();
     Task<User?> GetUserById(Guid id);
     Task<UserManagerResponse> ResetPassword(ResetPasswordVM model);
+    Task<UserManagerResponse> AssignManager(Guid ManagerId, Guid UserId);
     Task<UserManagerResponse> UpdateInformation(UpdateInformationVM model);
     Task<UserManagerResponse> PatchUpdate(Guid userId, JsonPatchDocument<User> patchDoc, ModelStateDictionary ModelState);
 }

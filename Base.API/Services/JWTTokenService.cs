@@ -10,72 +10,41 @@ using System.Text;
 
 namespace Base.API.Services
 {
-    public interface IJWTTokenService
+    public interface IJWTTokenService<T> where T : IdentityUser<Guid>
     {
-        Task<string> CreateToken(User user);
-        string CreateToken(Customer customer);
+        Task<string> CreateToken(T user);
     }
 
-    public class JWTTokenService : IJWTTokenService
+    public class JWTTokenService<T> : IJWTTokenService<T> where T : IdentityUser<Guid>
     {
         private readonly IConfiguration _configuration;
-        private readonly IUserService _userService;
+        private readonly IRoleService _roleService;
 
-        public JWTTokenService(IConfiguration configuration, IUserService userService)
+        public JWTTokenService(IConfiguration configuration, IRoleService roleService)
         {
             _configuration = configuration;
-            _userService = userService;
+            _roleService = roleService;
         }
 
-        public async Task<string> CreateToken(User user)
+        public async Task<string> CreateToken(T user)
         {
-            var rolesList = await _userService.GetRolesByUserId(user.Id);
-            string roles = "";
-            if(rolesList != null)
-            {
-                foreach (Role r in rolesList)
-                {
-                    roles = roles + " " + r.Name;
-                }
-            }
+            var roleClaims = await _roleService.GetRoleClaimsOfUser(user.Id);
 
             var claims = new List<System.Security.Claims.Claim>
             {
                 new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new System.Security.Claims.Claim(ClaimTypes.Name, user.UserName),
-                new System.Security.Claims.Claim("scope", roles.Trim()),
             };
 
-            /*var roleClaims = new System.Security.Claims.Claim[]
+            if (roleClaims != null && user is User)
             {
-                new System.Security.Claims.Claim("scope", roles.Trim())
-            };
+                claims.AddRange(roleClaims);
+            }
 
-            foreach(var claim in roleClaims)
+            if(user is Customer)
             {
-                claims.Add(claim);
-            }*/
-
-            var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]!));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Issuer"],
-                claims: claims,
-                expires: DateTime.Now.AddMinutes(30),
-                signingCredentials: creds);
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-
-        public string CreateToken(Customer customer)
-        {
-            var claims = new List<System.Security.Claims.Claim>
-            {
-                new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, customer.Id.ToString()),
-                new System.Security.Claims.Claim(ClaimTypes.Name, customer.UserName),
-                new System.Security.Claims.Claim("scope", "Customer")
-            };
+                claims.Add(new Claim("scope", "Customer"));
+            }
 
             var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

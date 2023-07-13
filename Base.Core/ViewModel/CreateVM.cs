@@ -25,11 +25,9 @@ public class ResetPasswordVM
     public string? OldPassword { get; set; }
 
     [Required]
-    [DataType(DataType.Password)]
     public string? NewPassword { get; set; }
 
     [Required]
-    [Compare("NewPassword", ErrorMessage = "Confirm Password does not match!!!")]
     public string? ConfirmPassword { get; set; }
 }
 
@@ -102,7 +100,28 @@ public class UserVM
     public Guid? ManagerId { get; set; }
 
     [Required]
-    public List<int> RoleIds { get; set; } = new();
+    public List<Guid>? RoleIds { get; set; }
+}
+
+public class RoleVM
+{
+    [Required]
+    public string? RoleName { get; set; }
+    public bool IsManager { get; set; }
+    public IEnumerable<ClaimVM>? Claims { get; set; }
+}
+
+public class ClaimVM
+{
+    [Required]
+    public string? Resource { get; set; }
+    public IEnumerable<string>? Actions { get; set; }
+}
+
+public class UpdateClaimVM
+{
+    public int? Id { get; set; }
+    public string? ClaimValue { get; set; } = null;
 }
 
 public class BookingVM
@@ -154,6 +173,7 @@ public class VoucherTypeVM
 
 public class VoucherVM
 {
+    [Required]
     public Guid CustomerId { get; set; }
     [Required]
     public int VoucherTypeId { get; set; }
@@ -169,5 +189,6 @@ public class ExpiredDateExtensionVM
     [Required]
     public int VoucherId { get; set; }
     public Decimal Price { get; set; }
+    [Required]
     public DateTime NewExpiredDate { get; set; }
 }

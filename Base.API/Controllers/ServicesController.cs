@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.IService;
@@ -23,13 +24,17 @@ namespace Base.API.Controllers
 
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseServiceVM>))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(string))]
+        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
         public IActionResult GetAllServices()
         {
             var result = _serviceService.GetAllService();
             if(result.IsNullOrEmpty() || result == null)
             {
-                return NotFound("No Service Found (Empty) !!!");
+                return NotFound(new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "empty"
+                });
             }
             return Ok(_mapper.Map<IEnumerable<Service>, IEnumerable<ResponseServiceVM>>(result));
         }
@@ -37,8 +42,8 @@ namespace Base.API.Controllers
 
         [HttpGet("{serviceId}", Name = nameof(GetServiceById))]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ResponseServiceVM))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(string))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(string))]
+        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
         public async Task<IActionResult> GetServiceById(int serviceId)
         {
             if (ModelState.IsValid)
@@ -46,16 +51,24 @@ namespace Base.API.Controllers
                 var result = await _serviceService.GetServiceById(serviceId);
                 if (result == null)
                 {
-                    return NotFound("No Service Found with the given id !!!");
+                    return NotFound( new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "No Service Found with the given id"
+                    });
                 }
                 return Ok(_mapper.Map<Service, ResponseServiceVM>(result));
             }
-            return BadRequest("Some properties are not valid !!!");
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Some properties are not valid"
+            });
         }
 
         [HttpPost]
         [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseServiceVM))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(string))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
         public async Task<IActionResult> AddNewService([FromBody] ServiceVM resource)
         {
             if (ModelState.IsValid)
@@ -71,9 +84,17 @@ namespace Base.API.Controllers
                         },
                         _mapper.Map<Service, ResponseServiceVM>(result));
                 }
-                return BadRequest("Some errors happened");
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Some errors happened"
+                });
             }
-            return BadRequest("Some properties are not valid !!!");
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Some properties are not valid"
+            });
         }
     }
 }

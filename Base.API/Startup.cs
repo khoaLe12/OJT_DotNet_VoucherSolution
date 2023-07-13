@@ -1,12 +1,14 @@
 ﻿using Base.API.Mapper.ModelToResource;
 using Base.API.Mapper.ResourceToModel;
+using Base.API.Middleware;
 using Base.API.Permission;
 using Base.API.Services;
 using Base.Core.Application;
+using Base.Core.Entity;
+using Base.Core.Identity;
 using Base.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -26,13 +28,18 @@ namespace Base.API
             services.AddAutoMapper(typeof(ItemMapper1), typeof(ItemMapper2));
             services.AddInfrastructure(Configuration);
 
-            services.AddScoped<IJWTTokenService, JWTTokenService>();
+            services.AddScoped<IJWTTokenService<User>, JWTTokenService<User>>();
+            services.AddScoped<IJWTTokenService<Customer>, JWTTokenService<Customer>>();
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             services.AddSingleton<ICurrentUserService,CurrentUserService>();
             services.AddSingleton<IAuthorizationPolicyProvider, AuthorizationPolicyProvider>();
             services.AddSingleton<IAuthorizationHandler, HasScopeHandler>();
 
-            services.AddControllers()
+            services.AddControllers(options =>
+            {
+                // Add Global Exception Filter here
+                //options.Filters.Add<HttpResponseExceptionFilter>();
+            })
                 .AddJsonOptions(o =>
                 {
                     o.JsonSerializerOptions.PropertyNamingPolicy = null;
@@ -93,24 +100,14 @@ namespace Base.API
 
             services.AddAuthorization(options =>
             {
-                options.AddPolicy("SupAdmin", policy =>
+                options.AddPolicy("Register User", policy =>
                 {
-                    policy.Requirements.Add(new HasScopeRequirement("SupAdmin", Configuration["Jwt:Issuer"]!));
+                    policy.Requirements.Add(new HasScopeRequirement("User:write", Configuration["Jwt:Issuer"]!));
                 });
 
-                options.AddPolicy("SalesAdmin", policy =>
+                options.AddPolicy("Register Customer", policy =>
                 {
-                    policy.Requirements.Add(new HasScopeRequirement("SupAdmin SalesAdmin", Configuration["Jwt:Issuer"]!));
-                });
-
-                options.AddPolicy("SalesEmployee", policy =>
-                {
-                    policy.Requirements.Add(new HasScopeRequirement("SupAdmin SalesAdmin SalesEmployee", Configuration["Jwt:Issuer"]!));
-                });
-
-                options.AddPolicy("Customers", policy =>
-                {
-                    policy.Requirements.Add(new HasScopeRequirement("Customer", Configuration["Jwt:Issuer"]!));
+                    policy.Requirements.Add(new HasScopeRequirement("Customer:write", Configuration["Jwt:Issuer"]!));
                 });
             });
 
@@ -128,14 +125,13 @@ namespace Base.API
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            if (env.IsDevelopment())
+            if (!env.IsDevelopment())
             {
-                app.UseDeveloperExceptionPage();
-                app.UseSwagger();
-                app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "VietJet.API v1"));
             }
+            app.UseMiddleware<GlobalExceptionMiddleware>();
 
-            
+            app.UseSwagger();
+            app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Voucher.API v1"));
 
             app.UseHttpsRedirection();
 
