@@ -12,4 +12,5 @@ public class Role : IdentityRole<Guid>
     public bool IsManager { get; set; } = false;
     public IEnumerable<User>? Users { get; set; }
     public virtual IEnumerable<RoleClaim>? RoleClaims { get; set; }
+    public bool IsDeleted { get; set; } = false;
 }

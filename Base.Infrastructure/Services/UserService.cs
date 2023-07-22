@@ -1,4 +1,5 @@
 ﻿using Base.Core.Application;
+using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.Identity;
 using Base.Core.ViewModel;
@@ -6,12 +7,10 @@ using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
 using Duende.IdentityServer.Extensions;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.UI.V4.Pages.Account.Manage.Internal;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
-using System.Xml.Linq;
 
 namespace Base.Infrastructure.Services;
 
@@ -22,38 +21,48 @@ internal class UserService : IUserService
     private readonly UserManager<User> _userManager;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IRoleService _roleService;
 
-    public UserService(UserManager<User> userManager, IUnitOfWork unitOfWork, ICurrentUserService currentUserService, RoleManager<Role> roleManager, IRoleService roleService)
+    public UserService(UserManager<User> userManager, IUnitOfWork unitOfWork, ICurrentUserService currentUserService, RoleManager<Role> roleManager)
     {
         //_logger = logger;
         _userManager = userManager;
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _roleManager = roleManager;
-        _roleService = roleService;
     }
 
     public async Task<UserManagerResponse> PatchUpdate(Guid userId, JsonPatchDocument<User> patchDoc, ModelStateDictionary ModelState)
     {
-        var operation = patchDoc.Operations.Find(o => o.op == "replace" && o.path == "LockoutEnabled");
-        if (patchDoc.Operations.Count() > 1 || operation == null)
+        var currentUser = await _userManager.FindByIdAsync(_currentUserService.UserId.ToString());
+        var user = await _unitOfWork.Users.FindAsync(userId);
+        var operations = patchDoc.Operations.Where(o => o.op != "replace" || o.path != "IsBlocked");
+
+        if (!operations.IsNullOrEmpty())
         {
             return new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = "Operation Not Supported"
+                Message = "Hành động không được hỗ trợ"
             };
         }
 
-        var currentUser = await _userManager.FindByIdAsync(_currentUserService.UserId.ToString());
-        var user = await _unitOfWork.Users.FindAsync(userId);
-        if(currentUser == null || user == null)
+        if(currentUser == null)
         {
             return new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = "User Not Found"
+                Message = "Không tìm thấy người dùng",
+                Errors = new List<string>() { $"Can not find user with the given id: {_currentUserService.UserId}" }
+            };
+        }
+
+        if (user == null)
+        {
+            return new UserManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng",
+                Errors = new List<string>() { $"Can not find user with the given id: {userId}" }
             };
         }
 
@@ -63,7 +72,7 @@ internal class UserService : IUserService
             return new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = $"You are not manager of user '{user.Name}'"
+                Message = $"Bạn không phải là người quản lý của người dùng '{user.Name}'"
             };
         }
 
@@ -87,7 +96,8 @@ internal class UserService : IUserService
             return new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = ModelState.ToString()
+                Message = "Cập nhật thất bại",
+                Errors = new List<string>() { ModelState.ToString() ?? $"Error when updating User '{user.Name}'" }
             };
         }
 
@@ -96,36 +106,27 @@ internal class UserService : IUserService
             return new UserManagerResponse
             {
                 IsSuccess = true,
-                Message = "Update Successfully."
+                Message = "Cập nhật thành công"
             };
         }
 
         return new UserManagerResponse
         {
             IsSuccess = false,
-            Message = "Update fail"
+            Message = "Cập nhật thất bại"
         };
     }
 
     public async Task<UserManagerResponse> UpdateInformation(UpdateInformationVM model)
     {
         try
-        {
-            if (model is null)
-            {
-                return new UserManagerResponse
-                {
-                    IsSuccess = false,
-                    Message = "Invalid: Update Information are null"
-                };
-            }
-            
+        { 
             var existedUser = await _userManager.FindByIdAsync(_currentUserService.UserId.ToString());
             if (existedUser == null)
             {
                 return new UserManagerResponse
                 {
-                    Message = "Can not found",
+                    Message = "Không tìm thấy người dùng",
                     IsSuccess = false
                 };
             }
@@ -142,7 +143,7 @@ internal class UserService : IUserService
                 return new UserManagerResponse
                 {
                     IsSuccess = true,
-                    Message = "Update Information successfully."
+                    Message = "Cập nhật thành công"
                 };
             }
             else
@@ -150,7 +151,7 @@ internal class UserService : IUserService
                 return new UserManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Update Information Fail"
+                    Message = "Cập nhật thất bại"
                 };
             }
         }
@@ -159,7 +160,7 @@ internal class UserService : IUserService
             return new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = "Update Information Fail",
+                Message = "Cập nhật thất bại",
                 Errors = new List<string>() { ex.Message }
             };
         }
@@ -173,7 +174,7 @@ internal class UserService : IUserService
             {
                 return new UserManagerResponse
                 {
-                    Message = "Invalid: Credentials are null",
+                    Message = "Thông tin cập nhật không hợp lệ",
                     IsSuccess = false,
                 };
             }
@@ -182,7 +183,7 @@ internal class UserService : IUserService
             {
                 return new UserManagerResponse
                 {
-                    Message = "Confirm password does not match the password",
+                    Message = "Mật khẩu xác thực và mật khẩu không giống nhau",
                     IsSuccess = false,
                 };
             }
@@ -192,7 +193,7 @@ internal class UserService : IUserService
             {
                 return new UserManagerResponse
                 {
-                    Message = "Can not found",
+                    Message = "Không tìm thấy người dùng",
                     IsSuccess = false
                 };
             }
@@ -203,14 +204,14 @@ internal class UserService : IUserService
                 return new UserManagerResponse
                 {
                     IsSuccess = true,
-                    Message = "Change Password Successfully."
+                    Message = "Cập nhật mật khẩu thành công"
                 };
             }
             else
             {
                 return new UserManagerResponse
                 {
-                    Message = "Password has not been updated",
+                    Message = "Cập nhật mật khẩu thất bại",
                     IsSuccess = false,
                     Errors = result.Errors.Select(e => e.Description)
                 };
@@ -221,7 +222,7 @@ internal class UserService : IUserService
             return new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = "Reset Password Fail",
+                Message = "Cập nhật mật khẩu thất bại",
                 Errors = new List<string>() { ex.Message }
             };
         }
@@ -229,22 +230,23 @@ internal class UserService : IUserService
 
     public async Task<UserManagerResponse> LoginUserAsync(LoginUserVM model)
     {
-        if (model == null)
-        {
-            return new UserManagerResponse
-            {
-                Message = "Invalid: Credentials are null",
-                IsSuccess = false,
-            };
-        }
-
         var user = await _userManager.Users.Include(u => u.Roles).FirstOrDefaultAsync(u => u.UserName == model.UserName);
         if (user == null)
         {
             return new UserManagerResponse
             {
-                Message = "User not found with the given User Name",
+                Message = "Tài khoản hoặc mật khẩu sai",
                 IsSuccess = false
+            };
+        }
+
+        if (user.IsBlocked)
+        {
+            return new UserManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Tài khoản hiện đang bị khóa",
+                Errors = new List<string>() { "Account is blocked" }
             };
         }
 
@@ -253,7 +255,7 @@ internal class UserService : IUserService
         {
             return new UserManagerResponse
             {
-                Message = "Login Successfully",
+                Message = "Đăng nhập thành công",
                 IsSuccess = true,
                 LoginUser = user
             };
@@ -262,7 +264,7 @@ internal class UserService : IUserService
         {
             return new UserManagerResponse
             {
-                Message = "Invalid Password",
+                Message = "Tài khoản hoặc mật khẩu sai",
                 IsSuccess = false
             };
         }
@@ -270,23 +272,14 @@ internal class UserService : IUserService
 
     public async Task<UserManagerResponse> RegisterNewUserAsync(UserVM model)
     {
-        // Check Credentials
-        if (model == null)
-        {
-            return new UserManagerResponse
-            {
-                Message = "Invalid: Credentials are null",
-                IsSuccess = false,
-            };
-        }
-
         // Check Password
         if (model.Password != model.ConfirmPassword)
         {
             return new UserManagerResponse
             {
-                Message = "Confirm password does not match the password",
-                IsSuccess = false
+                IsSuccess = false,
+                Message = "Mật khẩu xác thực và mật khẩu không giống nhau",
+                Errors = new List<string>() { "Password and confirm password are not the same", $"{model.Password} - {model.ConfirmPassword}" }
             };
         }
 
@@ -306,7 +299,8 @@ internal class UserService : IUserService
                     return new UserManagerResponse
                     {
                         IsSuccess = false,
-                        Message = "Role Not Found",
+                        Message = "Không tìm thấy vai trò",
+                        Errors = new List<string>() { "Can not find role with id: " + roleId }
                     };
                 }
                 roleNames.Add(role.NormalizedName);
@@ -323,7 +317,7 @@ internal class UserService : IUserService
                 return new UserManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Can not found Manager",
+                    Message = "Không tìm thấy người quản lý",
                 };
             }
 
@@ -333,7 +327,7 @@ internal class UserService : IUserService
                 return new UserManagerResponse
                 {
                     IsSuccess = false,
-                    Message = $"User '{manager.Name}' don't have any role"
+                    Message = $"'{manager.Name}' không phải là người quản lý"
                 };
             }
 
@@ -352,7 +346,7 @@ internal class UserService : IUserService
                 return new UserManagerResponse
                 {
                     IsSuccess = false,
-                    Message = $"User '{manager.Name}' is not a manager"
+                    Message = $"'{manager.Name}' không phải là người quản lý"
                 };
             }
 
@@ -375,11 +369,10 @@ internal class UserService : IUserService
             CitizenId = model.CitizenId,
             Email = model.Email,
             PhoneNumber = model.PhoneNumber,
-            LockoutEnd = model.LockoutEnd,
-            LockoutEnabled = model.LockoutEnabled ?? false,
             EmailConfirmed = model.EmailConfirmed ?? false,
             PhoneNumberConfirmed = model.PhoneNumberConfirmed ?? false,
             TwoFactorEnabled = model.TwoFactorEnabled ?? false,
+            IsBlocked = model.IsBlocked ?? false,
             PathFromRootManager = pathFromRootManager,
         };
 
@@ -387,7 +380,7 @@ internal class UserService : IUserService
         var identityResult = await _userManager.CreateAsync(identityUser, model.Password);
         if (identityResult.Succeeded)
         {
-            if(roleNames != null)
+            if(roleNames is not null)
             {
                 var roleResult = await _userManager.AddToRolesAsync(identityUser, roleNames);
                 if (!roleResult.Succeeded)
@@ -395,7 +388,7 @@ internal class UserService : IUserService
                     return new UserManagerResponse
                     {
                         IsSuccess = false,
-                        Message = "User has not been created",
+                        Message = "Tạo tài khoản thất bại",
                         Errors = roleResult.Errors.Select(e => e.Description)
                     };
                 }
@@ -403,14 +396,14 @@ internal class UserService : IUserService
             return new UserManagerResponse
             {
                 IsSuccess = true,
-                Message = "User created successfully"
+                Message = "Tạo tài khoản thành công"
             };
         }
         else
         {
             return new UserManagerResponse
             {
-                Message = "User has not been created",
+                Message = "Tạo tài khoản thất bại",
                 IsSuccess = false,
                 Errors = identityResult.Errors.Select(e => e.Description)
             };
@@ -422,116 +415,182 @@ internal class UserService : IUserService
         var newManager = await _unitOfWork.Users.Get(u => u.Id == ManagerId, u => u.Roles!).FirstOrDefaultAsync();
         var user = await _userManager.FindByIdAsync(UserId.ToString());
         
-        if(newManager != null && user != null)
+        if(newManager == null)
         {
-            // Check whether new manager is also old manager or not
-            if (user.PathFromRootManager.GetAncestor(1) == newManager.PathFromRootManager)
+            return new UserManagerResponse
             {
-                return new UserManagerResponse
-                {
-                    IsSuccess = false,
-                    Message = $"User '{user.Name}' is already managed by '{newManager.Name}'"
-                };
-            }
+                IsSuccess = false,
+                Message = "Không tìm thấy người quản lý",
+                Errors = new List<string>() { "Manager not found with the given id: " + ManagerId }
+            };
+        }
 
-            // Check roles
-            if(newManager.Roles.IsNullOrEmpty() || newManager.Roles == null)
+        if(user == null)
+        {
+            return new UserManagerResponse
             {
-                return new UserManagerResponse
-                {
-                    IsSuccess = false,
-                    Message = $"User '{newManager.Name}' are not a manager"
-                };
-            }
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng",
+                Errors = new List<string>() { "User not found with the given id: " + UserId }
+            };
+        }
 
-            // Check whether if a manager or not
-            bool isManager = false;
-            foreach(Role r in newManager.Roles)
+        // Check whether new manager is also old manager or not
+        if (user.PathFromRootManager.GetAncestor(1) == newManager.PathFromRootManager)
+        {
+            return new UserManagerResponse
             {
-                if (r.IsManager)
-                {
-                    isManager = true;
-                    break;
-                }
-            }
-            if (!isManager)
-            {
-                return new UserManagerResponse
-                {
-                    IsSuccess = false,
-                    Message = $"User '{newManager.Name}' are not a manager"
-                };
-            }
+                IsSuccess = true,
+                Message = "Không có sự thay đổi",
+                Errors = new List<string>() { $"'{user.Name}' is already managed by '{newManager.Name}'" }
+            };
+        }
 
-            // Move nodes here
-            await MoveNodes(user, newManager);
+        // Check roles
+        if (newManager.Roles.IsNullOrEmpty() || newManager.Roles == null)
+        {
+            return new UserManagerResponse
+            {
+                IsSuccess = false,
+                Message = $"'{newManager.Name ?? newManager.UserName}' không phải là người quản lý",
+                Errors = new List<string>() { $"User '{newManager.Name ?? newManager.UserName}' do not have sufficient privileges to be a manager" }
+            };
+        }
 
-            // Save Changes
-            if (await _unitOfWork.SaveChangesAsync())
+        // Check whether if a manager or not
+        bool isManager = false;
+        var roles = newManager.Roles.Where(r => !r.IsDeleted); 
+        foreach (Role r in newManager.Roles)
+        {
+            if (r.IsManager)
             {
-                return new UserManagerResponse
-                {
-                    IsSuccess = true,
-                    Message = "Update User Successfully"
-                };
+                isManager = true;
+                break;
             }
-            else
+        }
+        if (!isManager)
+        {
+            return new UserManagerResponse
             {
-                return new UserManagerResponse
-                {
-                    IsSuccess = false,
-                    Message = "Update User Fail"
-                };
-            }
+                IsSuccess = false,
+                Message = $"'{newManager.Name ?? newManager.UserName}' không phải là người quản lý",
+                Errors = new List<string>() { $"User '{newManager.Name ?? newManager.UserName}' do not have sufficient privileges to be a manager" }
+            };
+        }
+
+        // Move nodes here
+        await MoveNodes(user, newManager);
+
+        // Save Changes
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new UserManagerResponse
+            {
+                IsSuccess = true,
+                Message = "Cập nhật thành công"
+            };
         }
         else
         {
             return new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = "User or Manager Not Found"
+                Message = "Cập nhật thất bại",
+                Errors = new List<string>() { "Maybe Error from Server" }
             };
         }
     }
 
-    public IEnumerable<User>? GetAllUser()
+    public IEnumerable<User> GetAllUser()
     {
-        return _unitOfWork.Users.Get(u => true, u => u.Roles!).AsNoTracking();
+        return _unitOfWork.Users.Get(u => !u.IsDeleted, u => u.Roles!).AsNoTracking();
     }
 
     public async Task<User?> GetUserById(Guid id)
     {
         return await _unitOfWork.Users
-            .Get(u => u.Id == id, u => u.Roles!)
+            .Get(u => !u.IsDeleted && u.Id == id, u => u.Roles!)
             .FirstOrDefaultAsync();
     }
 
-    public async Task<IEnumerable<User>?> GetAllManagedUser()
+    public async Task<IEnumerable<User>> GetAllManagedUser()
     {
-        try
+        var user = await _userManager.FindByIdAsync(_currentUserService.UserId.ToString());
+        if(user == null)
         {
-            var user = await _userManager.FindByIdAsync(_currentUserService.UserId.ToString());
-            Expression<Func<User, bool>> where = u => u.PathFromRootManager.IsDescendantOf(
-                user.PathFromRootManager) && u != user;
-            return _unitOfWork.Users.Get(where);
+            throw new ArgumentNullException(null, "Người dùng không tồn tại");
         }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
+        Expression<Func<User, bool>> where = u =>
+            !u.IsDeleted &&
+            u.PathFromRootManager.IsDescendantOf(user.PathFromRootManager) && 
+            u != user;
+        return _unitOfWork.Users.Get(where);
     }
 
-    public async Task<IEnumerable<User>?> GetAllManager()
+    public async Task<IEnumerable<User>> GetAllManager()
     {
-        try
+        var user = await _userManager.FindByIdAsync(_currentUserService.UserId.ToString());
+        if (user == null)
         {
-            var user = await _userManager.FindByIdAsync(_currentUserService.UserId.ToString());
-            Expression<Func<User, bool>> where = u => user.PathFromRootManager.IsDescendantOf(u.PathFromRootManager) && u != user;
-            return _unitOfWork.Users.Get(where);
+            throw new ArgumentNullException(null, "Người dùng không tồn tại");
         }
-        catch (InvalidOperationException)
+        Expression<Func<User, bool>> where = u => 
+            !u.IsDeleted &&
+            user.PathFromRootManager.IsDescendantOf(u.PathFromRootManager) && 
+            u != user;
+        return _unitOfWork.Users.Get(where);
+    }
+
+    public async Task<IEnumerable<User>> GetAllSupportingUser()
+    {
+        var customer = await _unitOfWork.Customers.FindAsync(_currentUserService.UserId);
+        if (customer == null)
         {
-            throw;
+            throw new ArgumentNullException(null, "Khách hàng không tồn tại");
+        }
+        return _unitOfWork.Users.Get(u => !u.IsDeleted && u.Customers!.Contains(customer));
+    }
+
+    public async Task<ServiceResponse> SoftDelete(Guid id)
+    {
+        var existedUser = await _unitOfWork.Users.Get(sp => sp.Id == id && !sp.IsDeleted).FirstOrDefaultAsync();
+        if (existedUser == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng",
+                Error = new List<string>() { "Can not find user with the given id: " + id }
+            };
+        }
+
+        existedUser.IsDeleted = true;
+
+        var log = new Log
+        {
+            Type = (int)AuditType.Delete,
+            TableName = nameof(User),
+            PrimaryKey = id.ToString()
+        };
+
+        await _unitOfWork.AuditLogs.AddAsync(log);
+
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Xóa thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Xóa thất bại",
+                Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
         }
     }
 

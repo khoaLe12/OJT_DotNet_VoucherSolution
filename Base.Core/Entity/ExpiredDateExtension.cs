@@ -32,4 +32,6 @@ public class ExpiredDateExtension
     public DateTime DateTime { get; set; }
     public DateTime OldExpiredDate { get; set; }
     public DateTime NewExpiredDate { get; set; }
+
+    public bool IsDeleted { get; set; } = false;
 }

@@ -22,7 +22,8 @@ namespace Base.API.Controllers
             _customerService = customerService;
         }
 
-        [Authorize(Policy = "Register Customer")]
+        [Authorize(Policy = "Customer")]
+        [Authorize(Policy = "Write")]
         [HttpPost]
         [Route("Customer")]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
@@ -48,7 +49,8 @@ namespace Base.API.Controllers
                 return BadRequest(new CustomerManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Some properties are not valid"
+                    Message = "Dữ liệu không hợp lệ",
+                    Errors = new List<string>() { "Invalid input" }
                 });
             }
             catch (ObjectDisposedException ex)
@@ -56,13 +58,14 @@ namespace Base.API.Controllers
                 return StatusCode(500, new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "Registry new Customer Fail",
+                    Message = "Đã có lỗi xảy ra",
                     Error = new List<string>() { ex.Message }
                 });
             }
         }
 
-        [Authorize(Policy = "Register User")]
+        [Authorize(Policy = "User")]
+        [Authorize(Policy = "Write")]
         [HttpPost]
         [Route("User")]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
@@ -88,7 +91,8 @@ namespace Base.API.Controllers
                 return BadRequest(new UserManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Some properties are not valid"
+                    Message = "Dữ liệu không hợp lệ",
+                    Errors = new List<string>() { "Invalid input" }
                 });
             }
             catch (ObjectDisposedException ex)
@@ -96,7 +100,7 @@ namespace Base.API.Controllers
                 return StatusCode(500, new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "Registry new User Fail",
+                    Message = "Đã có lỗi xảy ra",
                     Error = new List<string>() { ex.Message }
                 });
             }
@@ -105,7 +109,7 @@ namespace Base.API.Controllers
                 return BadRequest(new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "Register new User Fail",
+                    Message = "Đăng ký thất bại",
                     Error = new List<string>() { ex.Message }
                 });
             }

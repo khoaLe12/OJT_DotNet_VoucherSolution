@@ -54,7 +54,9 @@ namespace Base.API.Controllers
             }
             return BadRequest(new UserManagerResponse
             {
-                Message = "Some properties are not valid"
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ",
+                Errors = new List<string>() { "Invalid input" }
             });
         }
 
@@ -86,7 +88,9 @@ namespace Base.API.Controllers
             }
             return BadRequest(new CustomerManagerResponse
             {
-                Message = "Some properties are not valid"
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ",
+                Errors = new List<string>() { "Invalid input" }
             });
         }
     }

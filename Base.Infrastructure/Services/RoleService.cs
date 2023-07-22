@@ -5,12 +5,16 @@ using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
 using Duende.IdentityServer.Extensions;
+using Duende.IdentityServer.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Security.Claims;
 using System.Text;
@@ -31,133 +35,114 @@ namespace Base.Infrastructure.Services
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<ServiceResponse> UpdateRoleClaims(IEnumerable<UpdateClaimVM> Claims, Guid roleId)
-        {
-            var role = await _unitOfWork.Roles.Get(r => r.Id == roleId, r => r.RoleClaims!).FirstOrDefaultAsync();
-            if(role == null)
-            {
-                return new ServiceResponse
+        /*        public async Task<ServiceResponse> UpdateRoleClaims(IEnumerable<UpdateClaimVM> Claims, Guid roleId)
                 {
-                    IsSuccess = false,
-                    Message = "Role Not Found"
-                };
-            }
-
-            var roleClaims = role.RoleClaims;
-            foreach(var claim in Claims)
-            {
-                if(claim.Id != null)
-                {
-                    var roleClaim = roleClaims?.Where(rc => rc.Id == claim.Id).FirstOrDefault();
-                    if (roleClaim == null)
+                    // Get Role
+                    var role = await _unitOfWork.Roles.Get(r => r.Id == roleId, r => r.RoleClaims!).FirstOrDefaultAsync();
+                    if (role == null)
                     {
                         return new ServiceResponse
                         {
                             IsSuccess = false,
-                            Message = "Some Permissions Not Found"
+                            Message = "Role Not Found"
                         };
                     }
-                    if(claim.ClaimValue == null)
+
+                    // Get All Role Claims Of Role, Create a list represent add Role Claims
+                    var roleClaims = role.RoleClaims?.ToList();
+                    var addedRoleClaims = new ConcurrentBag<RoleClaim>();
+
+                    // Use ConcurrentQueue to enable safe enqueueing from multiple threads.
+                    var exceptions = new ConcurrentQueue<Exception>();
+
+                    // For each Claim in UpdatedClaimVM
+                    var options = new ParallelOptions
                     {
-                        //Remove roleClaim
+                        MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.1) * 2))
+                    };
+                    Parallel.ForEach(Claims, options, (claim, state) =>
+                    {
+                        if (claim.Id != null)
+                        {
+                            var roleClaim = roleClaims?.Where(rc => rc.Id == claim.Id).FirstOrDefault();
+                            if (roleClaim == null)
+                            {
+                                exceptions.Enqueue(new ArgumentNullException(null, $"Role Claim with Id '{claim.Id}' Not Found"));
+                                state.Break();
+                                return;
+                            }
+
+                            if (claim.Resource == null)
+                            {
+                                //Soft remove roleClaim
+                                roleClaim.IsDeleted = true;
+                                _unitOfWork.RoleClaims.Update(roleClaim);
+                            }
+                            else
+                            {
+                                // Update Claim Value
+                                roleClaim.ClaimValue = GetAction(claim);
+                                _unitOfWork.RoleClaims.Update(roleClaim);
+                            }
+                        }
+                        else if (claim.Id == null && claim.Resource != null)
+                        {
+                            //Create new roleClaim
+                            RoleClaim r = new RoleClaim
+                            {
+                                RoleId = roleId,
+                                ClaimType = CustomClaimTypes.Permission,
+                                ClaimValue = GetAction(claim)
+                            };
+                            addedRoleClaims.Add(r);
+                        }
+                        else
+                        {
+                            exceptions.Enqueue(new ArgumentNullException(null, "Some Updated Claim are not valid"));
+                            state.Break();
+                            return;
+                        }
+                    });
+
+                    if (!exceptions.IsEmpty)
+                    {
+                        throw new AggregateException(exceptions);
                     }
-                    roleClaim.ClaimValue = claim.ClaimValue;
-                }
-                else
-                {
-                    //Create new roleClaim
-                }
-            }
-        }
 
-        public async Task<ServiceResponse> PatchUpdate(Guid roleId, JsonPatchDocument<Role> patchDoc, ModelStateDictionary ModelState)
-        {
-            var notSupportedOperations = patchDoc.Operations.Where(o => o.op != "replace" || (o.path != "IsManager" && o.path != "Name"));
-            if (!notSupportedOperations.IsNullOrEmpty())
-            {
-                return new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = "Operation Not Supported"
-                };
-            }
+                    if (!addedRoleClaims.IsNullOrEmpty())
+                    {
+                        role.RoleClaims = role.RoleClaims!.Concat(addedRoleClaims).ToList();
+                    }
 
-            var existedRole = await _roleManager.FindByIdAsync(roleId.ToString());
-            if(existedRole == null)
-            {
-                return new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = "Can Not Found Role"
-                };
-            }
-
-            Action<JsonPatchError> errorHandler = (error) =>
-            {
-                var operation = patchDoc.Operations.FirstOrDefault(op => op.path == error.AffectedObject.ToString());
-                if (operation != null)
-                {
-                    var propertyName = operation.path.Split('/').Last();
-                    ModelState.AddModelError(propertyName, error.ErrorMessage);
-                }
-                else
-                {
-                    ModelState.AddModelError("", error.ErrorMessage);
-                }
-            };
-
-            patchDoc.ApplyTo(existedRole, errorHandler);
-            if (!ModelState.IsValid)
-            {
-                return new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = "Update Fail",
-                    Error = new List<string>() { ModelState.ToString() ?? "" }
-                };
-            }
-
-            if (await _unitOfWork.SaveChangesAsync())
-            {
-                return new ServiceResponse
-                {
-                    IsSuccess = true,
-                    Message = "Update Successfully"
-                };
-            }
-            else
-            {
-                return new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = "Update Fail"
-                };
-            }
-        }
-
-        public async Task<IEnumerable<Role>?> GetAllRole()
-        {
-            return await _unitOfWork.Roles.Get(r => true, r => r.RoleClaims!).ToListAsync();
-        }
-
-        public async Task<Role?> GetRoleById(Guid id)
-        {
-            return await _unitOfWork.Roles.Get(r => r.Id == id, r => r.RoleClaims!).FirstOrDefaultAsync();
-        }
+                    if (await _unitOfWork.SaveChangesAsync())
+                    {
+                        return new ServiceResponse
+                        {
+                            IsSuccess = true,
+                            Message = "Update Successfully"
+                        };
+                    }
+                    else
+                    {
+                        return new ServiceResponse
+                        {
+                            IsSuccess = false,
+                            Message = "Update Fail"
+                        };
+                    }
+                }*/
 
         public async Task<Role?> AddNewRole(RoleVM model)
         {
             try
             {
-                if (model == null)
-                {
-                    throw new ArgumentNullException(null, "Role Information are null");
-                }
-
-                var identityRole = await _roleManager.FindByNameAsync(model.RoleName);
+                var identityRole = await _unitOfWork.Roles.Get(r => !r.IsDeleted && r.Name == model.RoleName).FirstOrDefaultAsync();
                 if (identityRole != null)
                 {
-                    throw new ArgumentException("Role Name is already taken");
+                    throw new CustomException("Tên vai trò đã tồn tại")
+                    {
+                        Errors = new List<string>() { $"Role name '{model.RoleName}' has already existed" }
+                    };
                 }
 
                 identityRole = new Role
@@ -171,13 +156,23 @@ namespace Base.Infrastructure.Services
                 {
                     if (model.Claims != null)
                     {
-                        foreach (var claim in model.Claims)
-                        {
-                            // A claim is constructed by 2 parts, first is resource, second is actions on that resource
-                            var resource = claim.Resource;
-                            var actions = string.Join(" ", claim.Actions!);
-                            await _roleManager.AddClaimAsync(identityRole, new Claim(CustomClaimTypes.Permission, string.Concat(resource, ":", actions)));
-                        }
+                        var roleId = identityRole.Id;
+                        var roleClaims = new ConcurrentBag<RoleClaim>();
+                        model.Claims.AsParallel()
+                            .WithDegreeOfParallelism(Convert.ToInt32(Math.Ceiling(Environment.ProcessorCount * 0.2) * 2.0))
+                            .ForAll(claim =>
+                            {
+                                RoleClaim r = new RoleClaim
+                                {
+                                    RoleId = roleId,
+                                    ClaimType = CustomClaimTypes.Permission,
+                                    ClaimValue = GetAction(claim)
+                                };
+                                roleClaims.Add(r);
+                            });
+                        identityRole.RoleClaims = roleClaims.ToList();
+
+                        await _unitOfWork.SaveChangesAsync();
                     }
                     return identityRole;
                 }
@@ -189,46 +184,426 @@ namespace Base.Infrastructure.Services
             }
         }
 
-        public async Task<IEnumerable<Role>?> GetRolesByUserId(Guid id)
+        public async Task<ServiceResponse> UpdateRole(Guid roleId, UpdatedRoleVM updatedRole)
         {
-            var user = await _userManager.FindByIdAsync(id.ToString());
-            if (user != null)
+            var existedRole = await _roleManager.FindByIdAsync(roleId.ToString());
+            var checkRole = await _roleManager.FindByNameAsync(updatedRole.RoleName);
+
+            if (existedRole == null)
             {
-                return await _unitOfWork.Roles.Get(r => r.Users!.Contains(user), r => r.RoleClaims!).ToListAsync();
-                /*IEnumerable<string>? roleNames = await _userManager.GetRolesAsync(user);
-                if (roleNames != null)
+                return new ServiceResponse
                 {
-                    List<Role> roles = new();
-                    foreach (string roleName in roleNames)
-                    {
-                        var role = await _roleManager.FindByNameAsync(roleName);
-                        roles.Add(role);
-                    }
-                    return roles;
-                }*/
+                    IsSuccess = false,
+                    Message = "Không tìm thấy vai trò",
+                    Error = new List<string>() { $"Can not find role with id: {roleId}" }
+                };
             }
-            return null;
+
+            if(checkRole != null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Tên vai trò đã tồn tại",
+                    Error = new List<string>() { $"Role name '{checkRole.Name}' has already existed" }
+                };
+            }
+
+            existedRole.Name = updatedRole.RoleName;
+            existedRole.IsManager = updatedRole.IsManager;
+
+            var result = await _roleManager.UpdateAsync(existedRole);
+            if (result.Succeeded)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "Cập nhật thành công"
+                };
+            }
+            else
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Cập nhật thất bại",
+                    Error = new List<string>() { "Maybe nothing has been changed", "Make sure using new value to update", "Maybe error from server" }
+                };
+            }
+
         }
 
-        public async Task<IEnumerable<Claim>?> GetRoleClaimsOfUser(Guid id)
+        public async Task<ServiceResponse> AddRoleClaims(Guid roleId, IEnumerable<ClaimVM> claims)
+        {
+            var existedRole = await _unitOfWork.Roles.Get(r => r.Id == roleId, r => r.RoleClaims!).FirstOrDefaultAsync();
+            if (existedRole == null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy vai trò"
+                };
+            }
+
+            var exceptions = new ConcurrentQueue<Exception>();
+            var addedClaims = new ConcurrentBag<RoleClaim>();
+            var options = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.1) * 2))
+            };
+            Parallel.ForEach(claims, options, (claim, state) =>
+            {
+                var existedRoleClaim = _unitOfWork.RoleClaims.Get(rc => !rc.IsDeleted && rc.ClaimValue.Contains(claim.Resource!));
+                if (!existedRoleClaim.IsNullOrEmpty())
+                {
+                    exceptions.Enqueue(new ArgumentException($"Resource '{claim.Resource}' already existed"));
+                    state.Stop();
+                    return;
+                }
+
+                RoleClaim r = new RoleClaim
+                {
+                    RoleId = roleId,
+                    ClaimType = CustomClaimTypes.Permission,
+                    ClaimValue = GetAction(claim)
+                };
+                addedClaims.Add(r);
+            });
+
+            if (!exceptions.IsNullOrEmpty())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Cập nhật thất bại",
+                    Error = exceptions.Select(ex => ex.Message)
+                };
+            }
+
+            if (addedClaims.IsNullOrEmpty())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy thông tin cập nhật",
+                    Error = new List<string>() { "Added Claims are null" }
+                };
+            }
+
+            if (existedRole.RoleClaims.IsNullOrEmpty() || existedRole.RoleClaims == null)
+            {
+                existedRole.RoleClaims = addedClaims.ToList();
+            }
+            else
+            {
+                existedRole.RoleClaims = existedRole.RoleClaims.Concat(addedClaims).ToList();
+            }
+
+            if(await _unitOfWork.SaveChangesAsync())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "Cập nhật thành công"
+                };
+            }
+            else
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Cập nhật thất bại",
+                    Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+                };
+            }
+        }
+
+        public async Task<ServiceResponse> UpdateRoleClaims(Guid roleId, IEnumerable<UpdatedClaimVM> claims)
+        {
+            var existedRole = await _unitOfWork.Roles.Get(r => r.Id == roleId, r => r.RoleClaims!).FirstOrDefaultAsync();
+            if (existedRole == null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy vai trò"
+                };
+            }
+
+            var existedRoleClaims = existedRole.RoleClaims;
+            if (existedRoleClaims.IsNullOrEmpty() || existedRoleClaims == null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không thể cập nhật quyền cho vai trò này",
+                    Error = new List<string>() { $"Role {existedRole.Name} does not have any role claim" }
+                };
+            }
+
+            var exceptions = new ConcurrentQueue<Exception>();
+            var options = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling(Environment.ProcessorCount * 0.1 * 2))
+            };
+            Parallel.ForEach(claims, options, (claim, state) =>
+            {
+                var existedClaim = existedRoleClaims.FirstOrDefault(c => c.Id == claim.Id);
+                if(existedClaim == null)
+                {
+                    exceptions.Enqueue(new ArgumentException($"Role Claim with id '{claim.Id}' Not Found"));
+                    state.Stop();
+                    return;
+                }
+
+                var existedRoleClaim = existedRoleClaims.FirstOrDefault(rc => !rc.IsDeleted && rc.ClaimValue.Contains(claim.Resource!));
+                if (existedRoleClaim is not null)
+                {
+                    exceptions.Enqueue(new ArgumentException($"Resource '{claim.Resource}' already existed"));
+                    state.Stop();
+                    return;
+                }
+
+                existedClaim.ClaimValue = GetAction(claim);
+                _unitOfWork.RoleClaims.Update(existedClaim);
+            });
+
+            if (!exceptions.IsNullOrEmpty())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Cập nhật thất bại",
+                    Error = exceptions.Select(ex => ex.Message)
+                };
+            }
+
+            if(await _unitOfWork.SaveChangesAsync())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "Cập nhật thành công"
+                };
+            }
+            else
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Cập nhật thất bại",
+                    Error = new List<string>() { "Maybe nothing has been changed", "Make sure using new value to update", "Maybe error from server" }
+                };
+            }
+        }
+
+        public async Task<IEnumerable<Role>> GetAllRole()
+        {
+            return await _unitOfWork.Roles.Get(r => !r.IsDeleted, r => r.RoleClaims!).ToListAsync();
+        }
+
+        public async Task<Role?> GetRoleById(Guid id)
+        {
+            return await _unitOfWork.Roles.Get(r => !r.IsDeleted && r.Id == id, r => r.RoleClaims!).FirstOrDefaultAsync();
+        }
+
+        public async Task<IEnumerable<Claim>> GetRoleClaimsOfUser(Guid id)
         {
             var roles = await GetRolesByUserId(id);
             if (roles != null)
             {
-                List<Claim> claims = new();
-                foreach (Role role in roles)
+                ConcurrentDictionary<string, string> checkClaims = new ConcurrentDictionary<string,string>();
+                foreach(Role role in roles)
                 {
-                    if(role.RoleClaims != null)
+                    var roleClaims = role.RoleClaims?.Where(rc => !rc.IsDeleted);
+                    roleClaims!.AsParallel()
+                    .WithDegreeOfParallelism(Convert.ToInt32(Math.Ceiling(Environment.ProcessorCount * 0.2 * 2)))
+                    .ForAll(roleClaim =>
                     {
-                        claims.AddRange(role.RoleClaims.Select(rc => rc.ToClaim()));
-                    }
+                        var claimValue = roleClaim.ClaimValue;
+                        var resource = claimValue.Split(":").First().Trim();
+                        var actions = claimValue.Split(":").Last().Trim();
+
+                        if (!checkClaims.ContainsKey(resource))
+                        {
+                            checkClaims.TryAdd(resource, actions);
+                        }
+                        else
+                        {
+                            if (!resource.Equals(actions))
+                            {
+                                checkClaims[resource] = UpdateAction(checkClaims[resource], actions);
+                            }
+                        }
+                    });
+                }
+
+                List<Claim> claims = new List<Claim>();
+                foreach (var keyValue in checkClaims)
+                {
+                    claims.Add(new Claim("scope", string.Concat(keyValue.Key, ":", keyValue.Value)));
                 }
                 return claims;
             }
             else
             {
-                return null;
+                return Enumerable.Empty<Claim>();
             }
+        }
+
+        private async Task<IEnumerable<Role>?> GetRolesByUserId(Guid id)
+        {
+            var user = await _userManager.FindByIdAsync(id.ToString());
+            if (user != null)
+            {
+                return await _unitOfWork.Roles.Get(r => !r.IsDeleted && r.Users!.Contains(user), r => r.RoleClaims!).ToListAsync();
+            }
+            return null;
+        }
+
+        public async Task<ServiceResponse> SoftDeleteRole(Guid id)
+        {
+            var existedRole = await _unitOfWork.Roles.Get(r => r.Id == id && !r.IsDeleted).FirstOrDefaultAsync();
+            if(existedRole == null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy vai trò",
+                    Error = new List<string>() { "Can not find role with the given id: " + id }
+                };
+            }
+
+            existedRole.IsDeleted = true;
+
+            var log = new Log
+            {
+                Type = (int)AuditType.Delete,
+                TableName = nameof(Role),
+                PrimaryKey = id.ToString()
+            };
+
+            await _unitOfWork.AuditLogs.AddAsync(log);
+
+            if (await _unitOfWork.SaveChangesAsync())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "Xóa thành công"
+                };
+            }
+            else
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Xóa thất bại",
+                    Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+                };
+            }
+        }
+
+        public async Task<ServiceResponse> SoftDeleteRoleClaim(int id)
+        {
+            var existedRoleClaim = await _unitOfWork.RoleClaims.Get(rc => rc.Id == id && !rc.IsDeleted).FirstOrDefaultAsync();
+            if (existedRoleClaim == null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy quyền",
+                    Error = new List<string>() { "Can not find role claim with the given id: " + id }
+                };
+            }
+
+            existedRoleClaim.IsDeleted = true;
+
+            var log = new Log
+            {
+                Type = (int)AuditType.Delete,
+                TableName = nameof(RoleClaim),
+                PrimaryKey = id.ToString()
+            };
+
+            await _unitOfWork.AuditLogs.AddAsync(log);
+
+            if (await _unitOfWork.SaveChangesAsync())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "Xóa thành công"
+                };
+            }
+            else
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Xóa thất bại",
+                    Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+                };
+            }
+        }
+
+
+
+        private string UpdateAction(string originalValue, string updateValue)
+        {
+            var actions = updateValue.Split(" ");
+            foreach(var action in actions)
+            {
+                if (!originalValue.Contains(action))
+                {
+                    originalValue += new string(" " + action);
+                }
+            }
+            return originalValue.Trim();
+        }
+
+        private string GetAction(ClaimVM model)
+        {
+            var actions = "";
+            if (model.Read)
+            {
+                actions += "read ";
+            }
+            if (model.Write)
+            {
+                actions += "write ";
+            }
+            if (model.Update)
+            {
+                actions += "update ";
+            }
+            if (model.Delete)
+            {
+                actions += "delete";
+            }
+            return string.Concat(model.Resource, ":", actions).Trim();
+        }
+
+        private string GetAction(UpdatedClaimVM model)
+        {
+            var actions = "";
+            if (model.Read)
+            {
+                actions += "read ";
+            }
+            if (model.Write)
+            {
+                actions += "write ";
+            }
+            if (model.Update)
+            {
+                actions += "update ";
+            }
+            if (model.Delete)
+            {
+                actions += "delete";
+            }
+            return string.Concat(model.Resource, ":", actions).Trim();
         }
     }
 }

@@ -13,9 +13,10 @@ namespace Base.Infrastructure.IService;
 
 public interface IVoucherTypeService
 {
-    Task<VoucherType?> AddNewVoucherType(VoucherType? voucherType, IEnumerable<int>? ServicePackageIds);
-    IEnumerable<VoucherType>? GetAllVoucherTypes();
+    Task<VoucherType?> AddNewVoucherType(VoucherType voucherType, IEnumerable<int>? ServicePackageIds);
+    IEnumerable<VoucherType> GetAllVoucherTypes();
     VoucherType? GetVoucherTypeById(int id);
     Task<ServiceResponse> PatchUpdate(int voucherTypeId, JsonPatchDocument<VoucherType> patchDoc, ModelStateDictionary ModelState);
-    Task<ServiceResponse> UpdateVoucherType(VoucherType? updatedVoucherType, int voucherTypeId);
+    Task<ServiceResponse> UpdateVoucherType(VoucherType updatedVoucherType, int voucherTypeId);
+    Task<ServiceResponse> SoftDelete(int id);
 }

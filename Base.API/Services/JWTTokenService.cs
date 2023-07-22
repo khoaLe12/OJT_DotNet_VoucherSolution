@@ -43,7 +43,7 @@ namespace Base.API.Services
 
             if(user is Customer)
             {
-                claims.Add(new Claim("scope", "Customer"));
+                claims.Add(new Claim("scope", "User Customer Booking Voucher VoucherExtension"));
             }
 
             var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]!));

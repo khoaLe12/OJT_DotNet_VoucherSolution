@@ -15,6 +15,8 @@ public interface IUnitOfWork
     IUserRepository Users { get; }
     IExpiredDateExtensionRepository ExpiredDateExtensions { get; }
     IRoleRepository Roles { get; }
+    IRoleClaimRepository RoleClaims { get; }
+    IAuditRepository AuditLogs { get; }
     Task<bool> SaveChangesAsync();
 }
 
@@ -32,6 +34,8 @@ public class UnitOfWork : IUnitOfWork, IDisposable
     public IUserRepository Users { get; private set; }
     public IExpiredDateExtensionRepository ExpiredDateExtensions { get; private set; }
     public IRoleRepository Roles { get; private set; }
+    public IRoleClaimRepository RoleClaims { get; private set; }
+    public IAuditRepository AuditLogs { get; private set; }
 
     public UnitOfWork(ApplicationDbContext applicationDbContext,
         //ILogger logger,
@@ -43,7 +47,9 @@ public class UnitOfWork : IUnitOfWork, IDisposable
         ICustomerRepository customers, 
         IUserRepository users, 
         IExpiredDateExtensionRepository expiredDateExtensionRepository,
-        IRoleRepository roleRepository)
+        IRoleRepository roleRepository,
+        IRoleClaimRepository roleClaimRepository,
+        IAuditRepository auditRepository)
     {
         _applicationDbContext = applicationDbContext;
         //_logger = logger
@@ -56,6 +62,8 @@ public class UnitOfWork : IUnitOfWork, IDisposable
         Users = users;
         ExpiredDateExtensions = expiredDateExtensionRepository;
         Roles = roleRepository;
+        RoleClaims = roleClaimRepository;
+        AuditLogs = auditRepository;
     }
 
     public async Task<bool> SaveChangesAsync()

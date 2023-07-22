@@ -3,73 +3,72 @@ using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.IService;
-using Duende.IdentityServer.Extensions;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
 
-namespace Base.API.Controllers
+namespace Base.API.Controllers;
+
+[Authorize(Policy = "VoucherType")]
+[Route("api/[controller]")]
+[ApiController]
+public class VoucherTypesController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class VoucherTypesController : ControllerBase
+    private readonly IVoucherTypeService _voucherTypeService;
+    private readonly IMapper _mapper;
+
+    public VoucherTypesController(IVoucherTypeService voucherTypeService, IMapper mapper)
     {
-        private readonly IVoucherTypeService _voucherTypeService;
-        private readonly IMapper _mapper;
+        _voucherTypeService = voucherTypeService;
+        _mapper = mapper;
+    }
 
-        public VoucherTypesController(IVoucherTypeService voucherTypeService, IMapper mapper)
-        {
-            _voucherTypeService = voucherTypeService;
-            _mapper = mapper;
-        }
+    [Authorize(Policy = "All")]
+    [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherTypeVM>))]
+    public IActionResult GetAllVoucherTypes()
+    {
+        var result = _voucherTypeService.GetAllVoucherTypes();
+        return Ok(_mapper.Map<IEnumerable<ResponseVoucherTypeVM>>(result));
+    }
 
-        [HttpGet]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherTypeVM>))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
-        public IActionResult GetAllVoucherTypes()
+    [Authorize(Policy = "Read")]
+    [HttpGet("{voucherTypeId}", Name = nameof(GetVoucherTypeById))]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ResponseVoucherTypeVM))]
+    [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public IActionResult GetVoucherTypeById(int voucherTypeId)
+    {
+        if (ModelState.IsValid)
         {
-            var result = _voucherTypeService.GetAllVoucherTypes();
-            if (result.IsNullOrEmpty() || result == null)
+            var result = _voucherTypeService.GetVoucherTypeById(voucherTypeId);
+            if(result == null)
             {
                 return NotFound(new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "empty"
+                    Message = "Không tìm thấy",
+                    Error = new List<string>() { "Can not find voucher type with the given id: " + voucherTypeId }
                 });
             }
-            return Ok(_mapper.Map<IEnumerable<ResponseVoucherTypeVM>>(result));
+            return Ok(_mapper.Map<ResponseVoucherTypeVM>(result));
         }
-
-        [HttpGet("{voucherTypeId}", Name = nameof(GetVoucherTypeById))]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ResponseVoucherTypeVM))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
-        public IActionResult GetVoucherTypeById(int voucherTypeId)
+        return BadRequest(new ServiceResponse
         {
-            if (ModelState.IsValid)
-            {
-                var result = _voucherTypeService.GetVoucherTypeById(voucherTypeId);
-                if(result == null)
-                {
-                    return NotFound(new ServiceResponse
-                    {
-                        IsSuccess = false,
-                        Message = "No Voucher type Found with the given id"
-                    });
-                }
-                return Ok(_mapper.Map<ResponseVoucherTypeVM>(result));
-            }
-            return BadRequest(new ServiceResponse
-            {
-                IsSuccess = false,
-                Message = "Some properties are not valid"
-            });
-        }
+            IsSuccess = false,
+            Message = "Dữ liệu không hợp lệ",
+            Error = new List<string>() { "Invalid input" }
+        });
+    }
 
-        [HttpPost]
-        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseVoucherTypeVM))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
-        public async Task<IActionResult> AddNewVoucherType([FromBody] VoucherTypeVM resource)
+    [Authorize(Policy = "Write")]
+    [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseVoucherTypeVM))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> AddNewVoucherType([FromBody] VoucherTypeVM resource)
+    {
+        try
         {
             if (ModelState.IsValid)
             {
@@ -83,16 +82,185 @@ namespace Base.API.Controllers
                         },
                         _mapper.Map<ResponseVoucherTypeVM>(result));
                 }
+                else
+                {
+                    return BadRequest(new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Đã có lỗi xảy ra"
+                    });
+                }
+            }
+            else
+            {
                 return BadRequest(new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "Some errors happened"
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
                 });
             }
+        }
+        catch (ArgumentNullException ex)
+        {
+            var message = ex.Message;
             return BadRequest(new ServiceResponse
             {
                 IsSuccess = false,
-                Message = "Some properties are not valid"
+                Message = message.Split(":").First(),
+                Error = new List<string>() { "Can not find Service Package with the given id: " + message.Split(":").Last() }
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ex.Message
+            });
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Tạo mới loại Voucher thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Update")]
+    [HttpPut("{voucherTypeId}")]
+    [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseVoucherTypeVM))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> UpdateVoucherType(int voucherTypeId, [FromBody] UpdatedVoucherTypeVM resource)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherTypeService.UpdateVoucherType(_mapper.Map<VoucherType>(resource), voucherTypeId);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" } 
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Update")]
+    [HttpPatch("{voucherTypeId}")]
+    [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseVoucherTypeVM))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> PatchUpdate(int voucherTypeId, [FromBody] JsonPatchDocument<VoucherType> patchDoc)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherTypeService.PatchUpdate(voucherTypeId, patchDoc, ModelState);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Delete")]
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> SoftDeleteVoucherType(int id)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherTypeService.SoftDelete(id);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
             });
         }
     }

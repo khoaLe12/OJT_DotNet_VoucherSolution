@@ -28,4 +28,5 @@ public class VoucherType
     public string? ConditionsAndPolicies { get; set; }
     public IEnumerable<Voucher>? Vouchers { get; set; }
     public IEnumerable<ServicePackage>? UsableServicePackages { get; set; }
+    public bool IsDeleted { get; set; } = false;
 }

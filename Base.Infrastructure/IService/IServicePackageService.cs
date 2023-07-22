@@ -13,9 +13,11 @@ namespace Base.Infrastructure.IService;
 
 public interface IServicePackageService
 {
-    Task<ServicePackage?> AddNewServicePackage(ServicePackage? servicePackage, IEnumerable<int>? servicesIds);
-    IEnumerable<ServicePackage>? GetALlServicePackage();
+    Task<ServiceResponse> ApplyVoucherType(int servicePackageId, IEnumerable<int> voucherTypeIds);
+    Task<ServicePackage?> AddNewServicePackage(ServicePackage servicePackage, IEnumerable<int> servicesIds);
+    IEnumerable<ServicePackage> GetALlServicePackage();
     ServicePackage? GetServicePackageById(int id);
-    Task<ServiceResponse> PatchUpdate(int servicePackageId, JsonPatchDocument<ServicePackage> patchDoc, ModelStateDictionary ModelState);
-    Task<ServiceResponse> UpdateServicePackage(ServicePackage? updatedServicePackage, int servicePackageId);
+    Task<ServiceResponse> UpdateInformation(int servicePackageId, ServicePackage updatedServicePackage);
+    Task<ServiceResponse> UpdateServiceOfServicePackage(IEnumerable<UpdatedServicesInPackageVM> updatedServicesInPackage, int servicePackageId);
+    Task<ServiceResponse> SoftDelete(int id);
 }

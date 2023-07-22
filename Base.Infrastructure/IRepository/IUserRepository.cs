@@ -5,5 +5,4 @@ namespace Base.Infrastructure.IRepository;
 
 public interface IUserRepository : IBaseRepository<User, Guid>
 {
-    Task<IEnumerable<User>?> GetUsersById(List<Guid> userIds);
 }

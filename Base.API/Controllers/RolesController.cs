@@ -1,180 +1,350 @@
 ﻿using AutoMapper;
-using Azure;
 using Base.Core.Common;
-using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.IService;
-using Duende.IdentityServer.Extensions;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.JsonPatch;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace Base.API.Controllers
+namespace Base.API.Controllers;
+
+[Authorize(Policy = "Role")]
+[Route("api/[controller]")]
+[ApiController]
+public class RolesController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class RolesController : ControllerBase
+    private readonly IRoleService _roleService;
+    private readonly IMapper _mapper;
+
+    public RolesController(IRoleService roleService, IMapper mapper)
     {
-        private readonly IRoleService _roleService;
-        private readonly IMapper _mapper;
+        _roleService = roleService;
+        _mapper = mapper;
+    }
 
-        public RolesController(IRoleService roleService, IMapper mapper)
-        {
-            _roleService = roleService;
-            _mapper = mapper;
-        }
+    [Authorize(Policy = "All")]
+    [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseRoleVM>))]
+    public async Task<IActionResult> GetAllRoles()
+    {
+        var roles = await _roleService.GetAllRole();
+        return Ok(_mapper.Map<IEnumerable<ResponseRoleVM>>(roles));
+    }
 
-        [HttpGet]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseRoleVM>))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
-        public async Task<IActionResult> GetAllRoles()
-        {
-            var roles = await _roleService.GetAllRole();
-            if (roles.IsNullOrEmpty() || roles == null)
-            {
-                return NotFound( new ServiceResponse
-                {
-                    IsSuccess = true,
-                    Message = "empty"
-                });
-            }
-            return Ok(_mapper.Map<IEnumerable<ResponseRoleVM>>(roles));
-        }
-
-        [HttpGet("{roleId}", Name = nameof(GetRoleById))]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ResponseRoleVM))]
-        [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
-        public async Task<IActionResult> GetRoleById(Guid roleId)
+    [Authorize(Policy = "Read")]
+    [HttpGet("{roleId}", Name = nameof(GetRoleById))]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ResponseRoleVM))]
+    [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetRoleById(Guid roleId)
+    {
+        if (ModelState.IsValid)
         {
             var role = await _roleService.GetRoleById(roleId);
-            if(role == null)
+            if (role == null)
             {
                 return NotFound(new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "Role Not Found"
+                    Message = "Không tìm thấy vai trò",
+                    Error = new List<string>() { "Can not find role with the given id: " + roleId }
                 });
             }
             return Ok(_mapper.Map<ResponseRoleVM>(role));
         }
-
-        [HttpPost]
-        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseRoleVM))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-        public async Task<IActionResult> AddNewRole(RoleVM resource)
+        else
         {
-            try
+            return BadRequest(new ServiceResponse
             {
-                if (ModelState.IsValid)
-                {
-                    var role = await _roleService.AddNewRole(resource);
-                    if (role != null)
-                    {
-                        return CreatedAtAction(nameof(GetRoleById),
-                            new
-                            {
-                                roleId = role.Id,
-                            },
-                            _mapper.Map<ResponseRoleVM>(role));
-                    }
-                    else
-                    {
-                        return BadRequest(new ServiceResponse
-                        {
-                            IsSuccess = false,
-                            Message = "Some errors happened"
-                        });
-                    }
-                }
-                return BadRequest(new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = "Some properties are not valid"
-                });
-            }
-            catch (ArgumentNullException ex)
-            {
-                return BadRequest(new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = ex.Message
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = ex.Message
-                });
-            }
-            catch(ObjectDisposedException ex)
-            {
-                return StatusCode(500, new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = ex.Message
-                });
-            }
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ",
+                Error = new List<string>() { "Invalid input" }
+            });
         }
+    }
 
-        [HttpPatch("{roleId}")]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-        public async Task<IActionResult> UpdateRole(Guid roleId, [FromBody] JsonPatchDocument<Role> patchDoc)
+    [Authorize(Policy = "Write")]
+    [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ResponseRoleVM))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> AddNewRole(RoleVM resource)
+    {
+        try
         {
-            try
+            if (ModelState.IsValid)
             {
-                if (ModelState.IsValid)
+                var role = await _roleService.AddNewRole(resource);
+                if (role != null)
                 {
-                    var result = await _roleService.PatchUpdate(roleId, patchDoc, ModelState);
-                    if (result.IsSuccess)
-                    {
-                        return Ok(result);
-                    }
-                    else
-                    {
-                        return BadRequest(result);
-                    }
+                    return CreatedAtAction(nameof(GetRoleById),
+                        new
+                        {
+                            roleId = role.Id,
+                        },
+                        _mapper.Map<ResponseRoleVM>(role));
                 }
                 else
                 {
                     return BadRequest(new ServiceResponse
                     {
                         IsSuccess = false,
-                        Message = "Some properties are not valid"
+                        Message = "Đã có lỗi xảy ra"
                     });
                 }
             }
-            catch (DbUpdateException ex)
+            return BadRequest(new ServiceResponse
             {
-                return StatusCode(500, new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = "Update Role Fail",
-                    Error = new List<string>() { ex.Message }
-                });
-            }
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ",
+                Error = new List<string>() { "Invalid input" }
+            });
         }
+        catch (CustomException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ex.Message,
+                Error = ex.Errors
+            });
+        }
+        catch(ObjectDisposedException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Đã có lỗi xảy ra",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
 
-        [HttpPut("Claims/{roleId}")]
-        public async Task<IActionResult> UpdateRoleClaims(int roleId, [FromBody] IEnumerable<UpdateClaimVM> resource)
+    [Authorize(Policy = "Update")]
+    [HttpPost("Claims/{roleId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> AddNewClaims(Guid roleId, [FromBody] IEnumerable<ClaimVM> resource)
+    {
+        try
         {
             if (ModelState.IsValid)
             {
-                return Ok();
+                var result = await _roleService.AddRoleClaims(roleId, resource);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
             }
             else
             {
                 return BadRequest(new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "Some properties are not valid"
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
                 });
             }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Update")]
+    [HttpPut("{roleId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> UpdateRole(Guid roleId, [FromBody] UpdatedRoleVM resource)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _roleService.UpdateRole(roleId, resource);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+
+    [Authorize(Policy = "Update")]
+    [HttpPut("Claims/{roleId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> UpdateClaims(Guid roleId, [FromBody] IEnumerable<UpdatedClaimVM> resource)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _roleService.UpdateRoleClaims(roleId, resource);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Delete")]
+    [HttpDelete("Role/{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> SoftDeleteRole(Guid id)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _roleService.SoftDeleteRole(id);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Delete")]
+    [HttpDelete("Claim/{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> SoftDeleteRoleClaim(int id)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _roleService.SoftDeleteRoleClaim(id);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
         }
     }
 }

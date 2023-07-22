@@ -42,4 +42,6 @@ public class Voucher
 
     //A list of extension information
     public IEnumerable<ExpiredDateExtension>? VoucherExtensions { get; set; }
+
+    public bool IsDeleted { get; set; } = false;
 }

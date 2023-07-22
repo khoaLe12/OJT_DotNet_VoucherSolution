@@ -5,12 +5,12 @@ using Base.Core.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using Npgsql.TypeMapping;
 
 namespace Base.Infrastructure.Data;
 
 public interface IApplicationDbContext
 {
+    public DbSet<Log> Logs { get; set; }
     public DbSet<Customer> Customers { get; set; }
     public DbSet<Booking> Bookings { get; set; }
     public DbSet<ServicePackage> ServicePackages { get; set; }
@@ -31,19 +31,12 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, Guid, Identity
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = new CancellationToken())
     {
-        foreach(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<AuditableEntity> entry in ChangeTracker.Entries<AuditableEntity>())
-        {
-            if(entry.State == EntityState.Added)
-            {
-                entry.Entity.CreatedBy = _currentUserService.UserId;
-                entry.Entity.CreatedAt = DateTime.Now;
-            }
-        }
         var result = await base.SaveChangesAsync(cancellationToken);
 
         return result;
     }
 
+    public DbSet<Log> Logs { get; set; }
     public DbSet<Customer> Customers { get; set; }
     public DbSet<Booking> Bookings { get; set; }
     public DbSet<ServicePackage> ServicePackages { get; set; }
@@ -124,7 +117,10 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, Guid, Identity
                     "VoucherTypeServicePackage",
                     l => l.HasOne(typeof(ServicePackage)).WithMany().HasForeignKey("ServicePackageId").HasPrincipalKey(nameof(ServicePackage.Id)),
                     r => r.HasOne(typeof(VoucherType)).WithMany().HasForeignKey("VoucherTypeId").HasPrincipalKey(nameof(VoucherType.Id)),
-                    j => j.HasKey("ServicePackageId", "VoucherTypeId"));
+                    j => 
+                    {
+                        j.HasKey("ServicePackageId", "VoucherTypeId");
+                    });
         });
 
         builder.Entity<ServicePackage>(entity =>
@@ -135,12 +131,6 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, Guid, Identity
                     l => l.HasOne(typeof(Service)).WithMany().HasForeignKey("ServiceId").HasPrincipalKey(nameof(Service.Id)),
                     r => r.HasOne(typeof(ServicePackage)).WithMany().HasForeignKey("ServicePackageId").HasPrincipalKey(nameof(ServicePackage.Id)),
                     j => j.HasKey("ServiceId" , "ServicePackageId"));
-        });
-
-        builder.Entity<Service>(entity =>
-        {
-            entity.HasIndex(e => e.ServiceName)
-                .IsUnique();
         });
 
         builder.Entity<ExpiredDateExtension>(entity =>

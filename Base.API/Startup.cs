@@ -11,7 +11,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System;
 using System.Text;
+using static Base.API.Middleware.GlobalExceptionMiddleware;
 
 namespace Base.API
 {
@@ -33,7 +35,7 @@ namespace Base.API
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             services.AddSingleton<ICurrentUserService,CurrentUserService>();
             services.AddSingleton<IAuthorizationPolicyProvider, AuthorizationPolicyProvider>();
-            services.AddSingleton<IAuthorizationHandler, HasScopeHandler>();
+            services.AddScoped<IAuthorizationHandler, HasScopeHandler>();
 
             services.AddControllers(options =>
             {
@@ -100,14 +102,74 @@ namespace Base.API
 
             services.AddAuthorization(options =>
             {
-                options.AddPolicy("Register User", policy =>
+                options.AddPolicy("Read", policy =>
                 {
-                    policy.Requirements.Add(new HasScopeRequirement("User:write", Configuration["Jwt:Issuer"]!));
+                    policy.Requirements.Add(new HasScopeRequirement("read", Configuration["Jwt:Issuer"]!));
                 });
 
-                options.AddPolicy("Register Customer", policy =>
+                options.AddPolicy("Write", policy =>
                 {
-                    policy.Requirements.Add(new HasScopeRequirement("Customer:write", Configuration["Jwt:Issuer"]!));
+                    policy.Requirements.Add(new HasScopeRequirement("write", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Delete", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("delete", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Update", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("update", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("All", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("all", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("User", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("User", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Customer", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("Customer", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Booking", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("Booking", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("VoucherType", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("VoucherType", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Voucher", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("Voucher", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Service", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("Service", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("ServicePackage", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("ServicePackage", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("VoucherExtension", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("VoucherExtension", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Role", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("Role", Configuration["Jwt:Issuer"]!));
                 });
             });
 
@@ -128,6 +190,34 @@ namespace Base.API
             if (!env.IsDevelopment())
             {
             }
+
+            app.UseStatusCodePages(async context =>
+            {
+                if(context.HttpContext.Response.StatusCode == 401)
+                {
+                    // Customize the response for 401 Unauthorized status code
+                    context.HttpContext.Response.ContentType = "application/json";
+                    var error = new ErrorDetails()
+                    {
+                        StatusCode = context.HttpContext.Response.StatusCode,
+                        Message = "Unauthorize: You do not have permission to access this resource."
+                    };
+                    await context.HttpContext.Response.WriteAsync(error.ToString());
+                }
+
+                if(context.HttpContext.Response.StatusCode == 403)
+                {
+                    // Customize the response for 403 Forbidden status code
+                    context.HttpContext.Response.ContentType = "application/json";
+                    var error = new ErrorDetails()
+                    {
+                        StatusCode = context.HttpContext.Response.StatusCode,
+                        Message = "Forbidden: You do not have sufficient privileges to access this resource."
+                    };
+                    await context.HttpContext.Response.WriteAsync(error.ToString());
+                }
+            });
+
             app.UseMiddleware<GlobalExceptionMiddleware>();
 
             app.UseSwagger();

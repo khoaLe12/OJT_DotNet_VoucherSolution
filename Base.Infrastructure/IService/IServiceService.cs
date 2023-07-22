@@ -13,9 +13,9 @@ namespace Base.Infrastructure.IService;
 
 public interface IServiceService
 {
-    Task<Service?> AddNewService(Service? service);
-    IEnumerable<Service>? GetAllService();
+    Task<Service?> AddNewService(Service service);
+    IEnumerable<Service> GetAllService();
     Task<Service?> GetServiceById(int id);
-    Task<ServiceResponse> PatchUpdate(int serviceId, JsonPatchDocument<Service> patchDoc, ModelStateDictionary ModelState);
-    Task<ServiceResponse> UpdateService(Service? updatedService, int serviceId);
+    Task<ServiceResponse> UpdateInformation(Service updatedService, int serviceId);
+    Task<ServiceResponse> SoftDelete(int id);
 }

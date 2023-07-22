@@ -9,7 +9,6 @@ namespace Base.Core.Enum;
 public enum BookingStatus
 {
     Pending = 1,
-    Waiting = 2,
-    Confirmed = 3,
-    Cancelled = 4,
+    Confirmed = 2,
+    Cancelled = 3,
 }

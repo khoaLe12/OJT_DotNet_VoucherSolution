@@ -10,4 +10,6 @@ public class Service
     public string ServiceName { get; set; } = "";
     public string? Description { get; set; }
     public IEnumerable<ServicePackage>? ServicePackages { get; set; }
+
+    public bool IsDeleted { get; set; } = false;
 }

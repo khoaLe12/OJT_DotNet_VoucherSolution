@@ -27,6 +27,10 @@ public class User : IdentityUser<Guid>
 
     [Required]
     public HierarchyId PathFromRootManager { get; set; } = HierarchyId.Parse("/");
+
+    public bool IsBlocked { get; set; } = false;
+
+    public bool IsDeleted { get; set; } = false;
 }
 
 public class AuthenticatedResponse

@@ -1,6 +1,7 @@
 ﻿using Base.Core.Entity;
 using Base.Core.Identity;
 using Base.Infrastructure.Data;
+using Base.Infrastructure.Interceptors;
 using Base.Infrastructure.IRepository;
 using Base.Infrastructure.IService;
 using Base.Infrastructure.Repository;
@@ -16,9 +17,16 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<ApplicationDbContext>(option => 
+        services.AddSingleton<UpdateAuditableEntitiesInterceptor>();
+
+        services.AddDbContext<ApplicationDbContext>( (sp, option) =>
+        {
+            var auditableInterceptor = sp.GetService<UpdateAuditableEntitiesInterceptor>();
+
             option.UseSqlServer(configuration.GetConnectionString("MsSQLConnection"), b => b.UseHierarchyId())
-            .UseExceptionProcessor());
+                .UseExceptionProcessor()
+                .AddInterceptors(auditableInterceptor);
+        });
         
         #region Identity
         services.AddIdentity<User, Role>(options =>
@@ -72,6 +80,9 @@ public static class DependencyInjection
         services.AddTransient<IApplicationDbContext, ApplicationDbContext>();
         services.AddTransient<IUnitOfWork, UnitOfWork>();
 
+
+        services.AddScoped<IAuditRepository, AuditRepository>();
+        services.AddScoped<IRoleClaimRepository, RoleClaimRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();

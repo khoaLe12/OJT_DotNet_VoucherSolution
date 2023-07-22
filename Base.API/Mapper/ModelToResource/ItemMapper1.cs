@@ -10,18 +10,25 @@ namespace Base.API.Mapper.ModelToResource
         {
             CreateMap<BookingVM, Booking>();
 
+            CreateMap<UpdatedBookingVM, Booking>();
+
             CreateMap<ServiceVM, Service>();
 
             CreateMap<ServicePackageVM, ServicePackage>();
 
+            CreateMap<UpdatedServicePackageVM, ServicePackage>();
+
             CreateMap<VoucherTypeVM, VoucherType>()
-                .ForMember(dest => dest.CommonPrice, opt => opt.MapFrom(src => src.GeneralPurchasePrice))
                 .ForMember(dest => dest.IsAvailable, opt => opt.MapFrom(src => src.IsActiveNow));
+
+            CreateMap<UpdatedVoucherTypeVM, VoucherType>();
 
             CreateMap<VoucherVM, Voucher>()
                 .ForMember(dest => dest.ActualPrice, opt => opt.MapFrom(src => src.ActualPurchasePrice));
 
             CreateMap<ExpiredDateExtensionVM, ExpiredDateExtension>();
+
+            CreateMap<UpdatedExpiredDateExtensionVM, ExpiredDateExtension>();
         }
     }
 }

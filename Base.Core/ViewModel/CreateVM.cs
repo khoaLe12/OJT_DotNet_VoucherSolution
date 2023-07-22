@@ -62,8 +62,7 @@ public class CustomerVM
     public bool? EmailConfirmed { get; set; }
     public bool? PhoneNumberConfirmed { get; set; }
     public bool? TwoFactorEnabled { get; set; }
-    public bool? LockoutEnabled { get; set; }
-    public DateTimeOffset? LockoutEnd { get; set; }
+    public bool? IsBlocked { get; set; }
 
     [Required]
     [MinLength(5)]
@@ -87,8 +86,7 @@ public class UserVM
     public bool? EmailConfirmed { get; set; }
     public bool? PhoneNumberConfirmed { get; set; }
     public bool? TwoFactorEnabled { get; set; }
-    public bool? LockoutEnabled { get; set; }
-    public DateTimeOffset? LockoutEnd { get; set; }
+    public bool? IsBlocked { get; set; }
 
     [Required]
     [MinLength(5)]
@@ -100,29 +98,49 @@ public class UserVM
     public Guid? ManagerId { get; set; }
 
     [Required]
-    public List<Guid>? RoleIds { get; set; }
+    public List<Guid> RoleIds { get; set; } = new();
 }
+
+//=========================================================
 
 public class RoleVM
 {
     [Required]
     public string? RoleName { get; set; }
-    public bool IsManager { get; set; }
+    public bool IsManager { get; set; } = false;
     public IEnumerable<ClaimVM>? Claims { get; set; }
+}
+
+public class UpdatedRoleVM
+{
+    [Required]
+    public string? RoleName { get; set; }
+    public bool IsManager { get; set; } = false;
 }
 
 public class ClaimVM
 {
     [Required]
     public string? Resource { get; set; }
-    public IEnumerable<string>? Actions { get; set; }
+    public bool Read { get; set; } = false;
+    public bool Write { get; set; } = false;
+    public bool Update { get; set; } = false;
+    public bool Delete { get; set; } = false;
 }
 
-public class UpdateClaimVM
+public class UpdatedClaimVM
 {
-    public int? Id { get; set; }
-    public string? ClaimValue { get; set; } = null;
+    [Required]
+    public int Id { get; set; }
+    [Required]
+    public string? Resource { get; set; }
+    public bool Read { get; set; } = false;
+    public bool Write { get; set; } = false;
+    public bool Update { get; set; } = false;
+    public bool Delete { get; set; } = false;
 }
+
+//===========================================================
 
 public class BookingVM
 {
@@ -141,34 +159,77 @@ public class BookingVM
     public List<int>? VoucherIds { get; set; }
 }
 
+public class UpdatedBookingVM
+{
+    [Required]
+    public string? BookingTitle { get; set; }
+    public int BookingStatus { get; set; }
+    public Decimal TotalPrice { get; set; }
+    public string? PriceDetails { get; set; }
+    public string? Note { get; set; }
+    public string? Descriptions { get; set; }
+    public DateTime? StartDateTime { get; set; }
+    public DateTime? EndDateTime { get; set; }
+}
+
 public class ServiceVM
 {
     [Required]
-    public string ServiceName { get; set; } = "";
+    public string? ServiceName { get; set; }
     public string? Description { get; set; }
 }
 
 public class ServicePackageVM
 {
     [Required]
-    public string ServicePackageName { get; set; } = "";
+    public string? ServicePackageName { get; set; }
+    public string? Description { get; set; }
     [Required]
     public List<int> ServicesIds { get; set; } = new();
 }
 
+public class UpdatedServicePackageVM
+{
+    [Required]
+    public string? ServicePackageName { get; set; }
+    public string? Description { get; set; }
+}
+
+public class UpdatedServicesInPackageVM
+{
+    public int Id { get; set; }
+    public bool IsDelete { get; set; }
+}
+
+//============================================================
+
 public class VoucherTypeVM
 {
     [Required]
-    public string TypeName { get; set; } = "";
+    public string? TypeName { get; set; }
+    public bool IsActiveNow { get; set; } = false;
     [Required]
-    public bool IsActiveNow { get; set; } = true;
-    public Decimal? GeneralPurchasePrice { get; set; }
-    public int? AvailableNumberOfVouchers { get; set; }
+    public Decimal CommonPrice { get; set; }
+    public int AvailableNumberOfVouchers { get; set; } = 0;
     public int? PercentageDiscount { get; set; }
     public Decimal? ValueDiscount { get; set; }
     public Decimal? MaximumValueDiscount { get; set; }
     public string? ConditionsAndPolicies { get; set; }
     public List<int>? ServicePackageIds { get; set; }
+}
+
+public class UpdatedVoucherTypeVM
+{
+    [Required]
+    public string? TypeName { get; set; }
+    public bool IsAvailable { get; set; } = false;
+    [Required]
+    public Decimal CommonPrice { get; set; }
+    public int AvailableNumberOfVouchers { get; set; } = 0;
+    public int? PercentageDiscount { get; set; }
+    public Decimal? ValueDiscount { get; set; }
+    public Decimal? MaximumValueDiscount { get; set; }
+    public string? ConditionsAndPolicies { get; set; }
 }
 
 public class VoucherVM
@@ -181,13 +242,27 @@ public class VoucherVM
     public DateTime ExpiredDate { get; set; }
     [Required]
     public Decimal ActualPurchasePrice { get; set; }
-    public IEnumerable<ExpiredDateExtensionVM>? VoucherExtensions { get; set; }
+}
+
+public class UpdatedVoucherVM
+{
+    public DateTime ExpiredDate { get; set; }
+    public Decimal ActualPrice { get; set; }
+    public Decimal? UsedValueDiscount { get; set; }
+    public int VoucherStatus { get; set; }
 }
 
 public class ExpiredDateExtensionVM
 {
     [Required]
     public int VoucherId { get; set; }
+    public Decimal Price { get; set; }
+    [Required]
+    public DateTime NewExpiredDate { get; set; }
+}
+
+public class UpdatedExpiredDateExtensionVM
+{
     public Decimal Price { get; set; }
     [Required]
     public DateTime NewExpiredDate { get; set; }

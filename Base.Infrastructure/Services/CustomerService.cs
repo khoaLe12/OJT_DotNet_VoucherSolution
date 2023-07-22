@@ -35,23 +35,24 @@ internal class CustomerService : ICustomerService
 
     public async Task<CustomerManagerResponse> PatchUpdate(Guid userId, JsonPatchDocument<Customer> patchDoc, ModelStateDictionary ModelState)
     {
-        var operations = patchDoc.Operations.Where(o => o.op != "replace" || o.path != "LockoutEnabled");
-        if (operations.IsNullOrEmpty())
+        var customer = await _unitOfWork.Customers.Get(c => !c.IsDeleted && c.Id == userId).FirstOrDefaultAsync();
+        var operations = patchDoc.Operations.Where(o => o.op != "replace" || o.path != "IsBlocked");
+
+        if (!operations.IsNullOrEmpty())
         {
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Operation Not Supported"
+                Message = "Hành động không được hỗ trợ"
             };
         }
 
-        var customer = await _unitOfWork.Customers.FindAsync(userId);
         if (customer == null)
         {
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Can not found"
+                Message = "Không tìm thấy tài khoản"
             };
         }
 
@@ -75,7 +76,8 @@ internal class CustomerService : ICustomerService
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = ModelState.ToString()
+                Message = "Cập nhật thất bại",
+                Errors = new List<string>() { ModelState.ToString() ?? $"Error when updating Customer '{customer.Name}'" }
             };
         }
 
@@ -84,14 +86,14 @@ internal class CustomerService : ICustomerService
             return new CustomerManagerResponse
             {
                 IsSuccess = true,
-                Message = "Update Successfully."
+                Message = "Cập nhật thành công"
             };
         }
 
         return new CustomerManagerResponse
         {
             IsSuccess = false,
-            Message = "Update Fail"
+            Message = "Cập nhật thất bại"
         };
     }
 
@@ -99,21 +101,13 @@ internal class CustomerService : ICustomerService
     {
         try
         {
-            if (model is null)
-            {
-                return new CustomerManagerResponse
-                {
-                    IsSuccess = false,
-                    Message = "Invalid: Update Information are null"
-                };
-            }
-
-            var existedCustomer = await _customerManager.FindByIdAsync(_currentUserService.UserId.ToString());
+            var userId = _currentUserService.UserId;
+            var existedCustomer = await _unitOfWork.Customers.Get(c => !c.IsDeleted && c.Id == userId).FirstOrDefaultAsync();
             if (existedCustomer == null)
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Can not found",
+                    Message = "Không tìm thấy tài khoản",
                     IsSuccess = false
                 };
             }
@@ -132,7 +126,7 @@ internal class CustomerService : ICustomerService
                 return new CustomerManagerResponse
                 {
                     IsSuccess = true,
-                    Message = "Update Information successfully."
+                    Message = "Cập nhật thành công"
                 };
             }
             else
@@ -140,7 +134,7 @@ internal class CustomerService : ICustomerService
                 return new CustomerManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Update Information Fail"
+                    Message = "Cập nhật thất bại"
                 };
             }
         }
@@ -149,7 +143,7 @@ internal class CustomerService : ICustomerService
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Update Information Fail",
+                Message = "Cập nhật thất bại",
                 Errors = new List<string>() { ex.Message }
             };
         }
@@ -158,21 +152,21 @@ internal class CustomerService : ICustomerService
             List<string>? errorList = new List<string>() { ex.Message };
             if (ex.InnerException!.Message.Contains("IX_Customers_CitizenId"))
             {
-                errorList.Add("Citizen Id is already taken");
+                errorList.Add("Mã công dân đã tồn tại");
             }
             if (ex.InnerException!.Message.Contains("IX_Customers_Email"))
             {
-                errorList.Add("Email is already taken");
+                errorList.Add("Email đã tổn tại");
             }
             if (ex.InnerException!.Message.Contains("IX_Customers_PhoneNumber"))
             {
-                errorList.Add("Phone Number is already taken");
+                errorList.Add("Số điện thoại đã tồn tại");
             }
 
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Update Information fail.",
+                Message = "Cập nhật thất bại",
                 Errors = errorList
             };
         }
@@ -182,20 +176,11 @@ internal class CustomerService : ICustomerService
     {
         try
         {
-            if(model == null)
-            {
-                return new CustomerManagerResponse
-                {
-                    Message = "Invalid: Credentials are null",
-                    IsSuccess = false,
-                };
-            }
-
             if (model.NewPassword != model.ConfirmPassword)
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Confirm password does not match the password",
+                    Message = "Mật khẩu xác thực và mật khẩu mới không giống nhau",
                     IsSuccess = false,
                 };
             }
@@ -205,7 +190,7 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Can not found",
+                    Message = "Không tìm thấy tài khoản",
                     IsSuccess = false
                 };
             }
@@ -216,7 +201,7 @@ internal class CustomerService : ICustomerService
                 return new CustomerManagerResponse
                 {
                     IsSuccess = true,
-                    Message = "Password has been updated successfully."
+                    Message = "Cập nhật thành công"
                 };
             }
             else
@@ -224,7 +209,7 @@ internal class CustomerService : ICustomerService
                 return new CustomerManagerResponse
                 {
                     IsSuccess = false,
-                    Message = "Password has not been updated",
+                    Message = "Cập nhật thất bại",
                     Errors = result.Errors.Select(e => e.Description)
                 };
             }
@@ -234,7 +219,7 @@ internal class CustomerService : ICustomerService
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Password has not been updated",
+                Message = "Cập nhật thất bại",
                 Errors = new List<string>() { ex.Message }
             };
         }
@@ -242,24 +227,37 @@ internal class CustomerService : ICustomerService
 
     public async Task<CustomerManagerResponse> LoginCustomerAsync(LoginCustomerVM model)
     {
-        if (model == null)
-        {
-            return new CustomerManagerResponse
-            {
-                Message = "Invalid: Credentials are null",
-                IsSuccess = false,
-            };
-        }
-
-        var customer = ((await _customerManager.FindByEmailAsync(model.AccountInformation))
-            ?? (await _customerManager.Users.FirstOrDefaultAsync(c => c.PhoneNumber == model.AccountInformation || c.CitizenId == model.AccountInformation)));
+        var loginInformation = model.AccountInformation;
+        var customer = await _unitOfWork.Customers
+            .Get(c => c.Email == loginInformation || c.PhoneNumber == loginInformation || c.CitizenId == loginInformation)
+            .FirstOrDefaultAsync();
 
         if (customer == null)
         {
             return new CustomerManagerResponse
             {
-                Message = "Customer not found with the given information",
+                Message = "Tài khoản hoặc mật khẩu sai",
                 IsSuccess = false
+            };
+        }
+
+        if (customer.IsDeleted)
+        {
+            return new CustomerManagerResponse
+            {
+                Message = "Tài khoản hoặc mật khẩu sai",
+                IsSuccess = false,
+                Errors = new List<string>() { "Account has been deleted" }
+            };
+        }
+
+        if (customer.IsBlocked)
+        {
+            return new CustomerManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Tài khoản hiện đang bị khóa",
+                Errors = new List<string>() { "Account is blocked" }
             };
         }
 
@@ -268,7 +266,7 @@ internal class CustomerService : ICustomerService
         {
             return new CustomerManagerResponse
             {
-                Message = "Login Successfully",
+                Message = "Đăng nhập thành công",
                 IsSuccess = true,
                 LoginCustomer = customer
             };
@@ -277,7 +275,7 @@ internal class CustomerService : ICustomerService
         {
             return new CustomerManagerResponse
             {
-                Message = "Invalid Password",
+                Message = "Tài khoản hoặc mật khẩu sai",
                 IsSuccess = false
             };
         }
@@ -287,20 +285,11 @@ internal class CustomerService : ICustomerService
     {
         try
         {
-            if (model == null)
-            {
-                return new CustomerManagerResponse
-                {
-                    Message = "Invalid: Credentials are null",
-                    IsSuccess = false,
-                };
-            }
-
             if (model.CitizenId == null && model.Email == null && model.PhoneNumber == null)
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "At least one of the informations CitizenId, Email and Phone Number are required",
+                    Message = "Yêu cầu phải điền it nhất 1 trong 3 (CCCD, Email, Phone)",
                     IsSuccess = false
                 };
             }
@@ -309,15 +298,28 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Confirm password does not match the password",
+                    Message = "Mật khẩu xác thực và mật khẩu không giống nhau",
                     IsSuccess = false
                 };
             }
 
-            IEnumerable<User>? userList;
-            if (model.SalesEmployeeIds != null)
+            var userList = new List<User>();
+            if(model.SalesEmployeeIds is not null)
             {
-                userList = await _unitOfWork.Users.GetUsersById(model.SalesEmployeeIds.ToList());
+                foreach (var userId in model.SalesEmployeeIds)
+                {
+                    var existedUser = await _unitOfWork.Users.Get(u => u.Id == userId && !u.IsDeleted).FirstOrDefaultAsync();
+                    if(existedUser == null)
+                    {
+                        return new CustomerManagerResponse
+                        {
+                            IsSuccess = false,
+                            Message = "Không tìm thấy người hỗ trợ",
+                            Errors = new List<string>() { "Can not find user with the given id: " + userId }
+                        };
+                    }
+                    userList.Add(existedUser);
+                }
             }
             else
             {
@@ -331,11 +333,10 @@ internal class CustomerService : ICustomerService
                 CitizenId = model.CitizenId,
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber,
-                LockoutEnd = model.LockoutEnd,
-                LockoutEnabled = model.LockoutEnabled ?? false,
                 EmailConfirmed = model.EmailConfirmed ?? false,
                 PhoneNumberConfirmed = model.PhoneNumberConfirmed ?? false,
                 TwoFactorEnabled = model.TwoFactorEnabled ?? false,
+                IsBlocked = model.IsBlocked ?? false,
                 SalesEmployees = userList
             };
 
@@ -344,7 +345,7 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Customer created successfully",
+                    Message = "Tạo thành công",
                     IsSuccess = true
                 };
             }
@@ -352,7 +353,7 @@ internal class CustomerService : ICustomerService
             {
                 return new CustomerManagerResponse
                 {
-                    Message = "Customer has not been created",
+                    Message = "Tạo thất bại",
                     IsSuccess = false,
                     Errors = result.Errors.Select(e => e.Description)
                 };
@@ -363,21 +364,21 @@ internal class CustomerService : ICustomerService
             var errorList = new List<string>() { ex.Message };
             if (ex.InnerException!.Message.Contains("IX_Customers_CitizenId"))
             {
-                errorList.Add("Citizen Id is already taken");
+                errorList.Add("Mã công dân đã tồn tại");
             }
             if (ex.InnerException!.Message.Contains("IX_Customers_Email"))
             {
-                errorList.Add("Email is already taken");
+                errorList.Add("Email đã tổn tại");
             }
             if (ex.InnerException!.Message.Contains("IX_Customers_PhoneNumber"))
             {
-                errorList.Add("Phone number is already taken");
+                errorList.Add("Số điện thoại đã tồn tại");
             }
 
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Customer has not been created",
+                Message = "Tạo thất bại",
                 Errors = errorList
             };
         }
@@ -386,42 +387,79 @@ internal class CustomerService : ICustomerService
             return new CustomerManagerResponse
             {
                 IsSuccess = false,
-                Message = "Customer has not been created",
+                Message = "Tạo thất bại",
                 Errors = new List<string>() { ex.Message }
             };
         }
     }
 
-    public IEnumerable<Customer>? GetAllCustomers()
+    public IEnumerable<Customer> GetAllCustomers()
     {
-        return _unitOfWork.Customers.FindAll();
+        return _unitOfWork.Customers.FindAll().Where(c => !c.IsDeleted);
     }
 
-    public async Task<IEnumerable<Customer>?> GetAllSupportedCustomer()
+    public async Task<IEnumerable<Customer>> GetAllSupportedCustomer()
     {
-        try
+        var user = await _unitOfWork.Users.Get(u => u.Id == _currentUserService.UserId && !u.IsDeleted).FirstOrDefaultAsync();
+        if (user == null)
         {
-            var user = await _unitOfWork.Users.FindAsync(_currentUserService.UserId);
-            if (user != null)
-            {
-                return _unitOfWork.Customers.Get(c => c.SalesEmployees!.Contains(user));
-            }
-            return null;
+            throw new ArgumentNullException(null, "Người dùng không tồn tại");
         }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
+        return _unitOfWork.Customers.Get(c => c.SalesEmployees!.Contains(user) && !c.IsDeleted);
     }
 
     public async Task<Customer?> GetCustomerById(Guid id)
     {
         return await _unitOfWork.Customers
-            .Get(c => c.Id == id, new Expression<Func<Customer, object>>[]
+            .Get(c => c.Id == id && !c.IsDeleted, new Expression<Func<Customer, object>>[]
             {
-                c => c.Vouchers!
+                c => c.Vouchers!,
+                c => c.Bookings!
             })
             .Include(nameof(Customer.Bookings) + "." + nameof(Booking.SalesEmployee))
             .FirstOrDefaultAsync();
+    }
+
+    public async Task<ServiceResponse> SoftDelete(Guid id)
+    {
+        var existedCustomer = await _unitOfWork.Customers.Get(c => c.Id == id && !c.IsDeleted).FirstOrDefaultAsync();
+        if(existedCustomer == null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy tài khoản",
+                Error = new List<string>() { "Can not find customer with the given id: " + id }
+            };
+        }
+
+        existedCustomer.IsDeleted = true;
+
+        var log = new Log
+        {
+            Type = (int)AuditType.Delete,
+            TableName = nameof(Customer),
+            PrimaryKey = id.ToString()
+        };
+
+        await _unitOfWork.AuditLogs.AddAsync(log);
+
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Xóa thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Xóa thất bại",
+                Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
     }
 }

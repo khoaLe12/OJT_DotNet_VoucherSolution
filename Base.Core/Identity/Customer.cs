@@ -17,6 +17,10 @@ public class Customer : IdentityUser<Guid>
 
     //A list of Voucher that owned by the Customer
     public IEnumerable<Voucher>? Vouchers { get; set; }
+
+    public bool IsBlocked { get; set; } = false;
+
+    public bool IsDeleted { get; set; } = false;
 }
 
 public class CustomerManagerResponse

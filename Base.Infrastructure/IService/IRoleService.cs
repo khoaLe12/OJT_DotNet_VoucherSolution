@@ -15,11 +15,15 @@ namespace Base.Infrastructure.IService
 {
     public interface IRoleService
     {
-        Task<ServiceResponse> PatchUpdate(Guid roleId, JsonPatchDocument<Role> patchDoc, ModelStateDictionary ModelState);
+        //Task<ServiceResponse> UpdateRoleClaims(IEnumerable<UpdateClaimVM> Claims, Guid roleId);
         Task<Role?> AddNewRole(RoleVM model);
-        Task<IEnumerable<Role>?> GetAllRole();
+        Task<ServiceResponse> UpdateRole(Guid roleId, UpdatedRoleVM updatedRole);
+        Task<ServiceResponse> AddRoleClaims(Guid roleId, IEnumerable<ClaimVM> claims);
+        Task<ServiceResponse> UpdateRoleClaims(Guid roleId, IEnumerable<UpdatedClaimVM> claims);
+        Task<IEnumerable<Role>> GetAllRole();
         Task<Role?> GetRoleById(Guid id);
-        Task<IEnumerable<Role>?> GetRolesByUserId(Guid id);
-        Task<IEnumerable<Claim>?> GetRoleClaimsOfUser(Guid id);
+        Task<IEnumerable<Claim>> GetRoleClaimsOfUser(Guid id);
+        Task<ServiceResponse> SoftDeleteRole(Guid id);
+        Task<ServiceResponse> SoftDeleteRoleClaim(int id);
     }
 }

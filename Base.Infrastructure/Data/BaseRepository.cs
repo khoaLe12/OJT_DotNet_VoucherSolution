@@ -7,7 +7,7 @@ namespace Base.Infrastructure.Data
     public interface IBaseRepository<T, TKey> where T : class
     {
         Task<T?> FindAsync(TKey id);
-        IQueryable<T>? FindAll();
+        IQueryable<T> FindAll();
         IQueryable<T> Get(Expression<Func<T, bool>> where);
         IQueryable<T> Get(Expression<Func<T, bool>> where, params Expression<Func<T, object>>[] includes);
         Task AddAsync(T entity);
@@ -41,7 +41,7 @@ namespace Base.Infrastructure.Data
             await dbSet.AddRangeAsync(entities);
         }
 
-        public virtual IQueryable<T>? FindAll()
+        public virtual IQueryable<T> FindAll()
         {
             return dbSet.AsNoTracking();
         }

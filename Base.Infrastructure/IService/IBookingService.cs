@@ -13,11 +13,12 @@ namespace Base.Infrastructure.IService;
 
 public interface IBookingService
 {
-    Task<Booking?> AddNewBooking(Booking? booking, Guid? CustomerId, int? ServicePackageId, IEnumerable<int>? VoucherIds);
-    IEnumerable<Booking>? GetAllBookings();
+    Task<ServiceResponse> ApplyVouchers(int bookingId, IEnumerable<int> voucherIds);
+    Task<Booking?> AddNewBooking(Booking booking, Guid CustomerId, int ServicePackageId, IEnumerable<int>? VoucherIds);
+    IEnumerable<Booking> GetAllBookings();
     Task<Booking?> GetBookingById(int id);
-    Task<ServiceResponse> PatchUpdate(int bookingId, JsonPatchDocument<Booking> patchDoc, ModelStateDictionary ModelState);
-    Task<ServiceResponse> UpdateBooking(Booking? updatedBooking, int bookingId);
-    Task<IEnumerable<Booking>?> GetAllBookingOfUser();
-    Task<IEnumerable<Booking>?> GetAllBookingOfCustomer();
+    Task<ServiceResponse> UpdateBooking(Booking updatedBooking, int bookingId);
+    Task<IEnumerable<Booking>> GetAllBookingOfUser();
+    Task<IEnumerable<Booking>> GetAllBookingOfCustomer();
+    Task<ServiceResponse> SoftDelete(int bookingId);
 }

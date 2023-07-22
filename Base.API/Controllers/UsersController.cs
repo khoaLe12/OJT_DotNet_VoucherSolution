@@ -3,16 +3,14 @@ using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.IService;
-using Duende.IdentityServer.Extensions;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 namespace Base.API.Controllers;
 
+[Authorize(Policy = "User")]
 [Route("api/[controller]")]
 [ApiController]
 public class UsersController : ControllerBase
@@ -26,83 +24,16 @@ public class UsersController : ControllerBase
         _mapper = mapper;
     }
 
+    [Authorize(Policy = "All")]
     [HttpGet("All-Users")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
-    [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
     public IActionResult GetAllUser()
     {
         var result = _userService.GetAllUser();
-        if(result.IsNullOrEmpty() || result == null)
-        {
-            return NotFound(new ServiceResponse
-            {
-                IsSuccess = true,
-                Message = "empty"
-            });
-        }
         return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
     }
 
-    [HttpGet("All-Managed-Users")]
-    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
-    [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
-    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> GetAllManagedUser()
-    {
-        try
-        {
-            var result = await _userService.GetAllManagedUser();
-            if (result.IsNullOrEmpty() || result == null)
-            {
-                return NotFound(new ServiceResponse
-                {
-                    IsSuccess = true,
-                    Message = "empty"
-                });
-            }
-            return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
-        }
-        catch(InvalidOperationException ex)
-        {
-            return BadRequest(new ServiceResponse
-            {
-                IsSuccess = false,
-                Message = "Please Login First",
-                Error = new List<string>() { ex.Message }
-            });
-        }
-    }
-
-    [HttpGet("All-Manager")]
-    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
-    [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
-    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> GetAllManager()
-    {
-        try
-        {
-            var result = await _userService.GetAllManager();
-            if (result.IsNullOrEmpty() || result == null)
-            {
-                return NotFound(new ServiceResponse
-                {
-                    IsSuccess = true,
-                    Message = "empty"
-                });
-            }
-            return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new ServiceResponse
-            {
-                IsSuccess = false,
-                Message = "Please Login First",
-                Error = new List<string>() { ex.Message }
-            });
-        }
-    }
-
+    [Authorize(Policy = "Read")]
     [HttpGet("{UserId}", Name = nameof(GetUserById))]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ResponseUserInformationVM))]
     [ProducesResponseType(StatusCodes.Status404NotFound, Type = typeof(ServiceResponse))]
@@ -112,13 +43,105 @@ public class UsersController : ControllerBase
         var result = await _userService.GetUserById(UserId);
         if (result == null)
         {
-            return NotFound( new ServiceResponse
+            return NotFound(new ServiceResponse
             {
                 IsSuccess = false,
-                Message = "No Customer Found with the given id"
+                Message = "Không tìm thấy"
             });
         }
         return Ok(_mapper.Map<ResponseUserInformationVM>(result));
+    }
+
+    [Authorize(Policy = "Read")]
+    [HttpGet("All-Managed-Users")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetAllManagedUsers()
+    {
+        try
+        {
+            var result = await _userService.GetAllManagedUser();
+            return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
+        }
+        catch(InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Hành động không hợp lệ",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch(ArgumentNullException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ex.Message,
+                Error = new List<string>() { "Can not find logged User with the given user id" }
+            });
+        }
+    }
+
+    [HttpGet("All-Manager")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetAllManagers()
+    {
+        try
+        {
+            var result = await _userService.GetAllManager();
+            return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Hành động không hợp lệ",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch (ArgumentNullException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ex.Message,
+                Error = new List<string>() { "Can not find logged User with the given user id" }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Customer")]
+    [HttpGet("All-Supporting-Users")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetAllSupportingUsers()
+    {
+        try
+        {
+            var result = await _userService.GetAllSupportingUser();
+            return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Hành động không hợp lệ",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch (ArgumentNullException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = ex.Message,
+                Error = new List<string>() { "Can not find logged Customer with the given customer id" }
+            });
+        }
     }
 
     [HttpPost("Reset-Password")]
@@ -141,10 +164,11 @@ public class UsersController : ControllerBase
         return BadRequest(new UserManagerResponse
         {
             IsSuccess = false,
-            Message = "Some properties are not valid"
+            Message = "Dữ liệu không hợp lệ"
         });
     }
 
+    [Authorize(Policy = "Update")]
     [HttpPost("Assign-Manager")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UserManagerResponse))]
@@ -168,7 +192,7 @@ public class UsersController : ControllerBase
             return StatusCode(500, new UserManagerResponse
             {
                 IsSuccess = false,
-                Message = "Some Error Happend",
+                Message = "Đã có lỗi xảy ra",
                 Errors = new List<string>() { ex.Message }
             });
         }
@@ -194,10 +218,11 @@ public class UsersController : ControllerBase
         return BadRequest(new UserManagerResponse
         {
             IsSuccess = false,
-            Message = "Some properties are not valid"
+            Message = "Dữ liệu không hợp lệ"
         });
     }
 
+    [Authorize(Policy = "Update")]
     [HttpPatch("{userId}")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UserManagerResponse))]
@@ -218,7 +243,58 @@ public class UsersController : ControllerBase
         return BadRequest(new UserManagerResponse
         {
             IsSuccess = false,
-            Message = "Some properties are not valid"
+            Message = "Dữ liệu không hợp lệ"
         });
+    }
+
+    [Authorize(Policy = "Delete")]
+    [HttpDelete("{userId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> SoftDeleteServicePackage(Guid userId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _userService.SoftDelete(userId);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
     }
 }
