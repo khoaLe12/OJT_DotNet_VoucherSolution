@@ -1,4 +1,5 @@
-﻿using Base.Core.Identity;
+﻿using Base.Core.Common;
+using Base.Core.Identity;
 using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -7,7 +8,7 @@ using System.Runtime.InteropServices;
 
 namespace Base.Core.Entity;
 
-public class Booking
+public class Booking : IAuditable
 {
     [Key]
     public int Id { get; set; }

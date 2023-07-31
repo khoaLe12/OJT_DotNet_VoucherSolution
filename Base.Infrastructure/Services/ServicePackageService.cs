@@ -1,15 +1,9 @@
-﻿using AutoMapper.Configuration;
-using Base.Core.Common;
+﻿using Base.Core.Common;
 using Base.Core.Entity;
-using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
-using Duende.IdentityServer.Extensions;
-using Microsoft.AspNetCore.JsonPatch;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Concurrent;
 using System.Linq.Expressions;
 
 
@@ -24,7 +18,7 @@ internal class ServicePackageService : IServicePackageService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ServiceResponse> ApplyVoucherType(int servicePackageId, IEnumerable<int> voucherTypeIds)
+    public async Task<ServiceResponse> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<UpdatedVoucherTypesInPackageVM> model)
     {
         var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.Id == servicePackageId, sp => sp.ValuableVoucherTypes!).FirstOrDefaultAsync();
         if (existedServicePackage == null)
@@ -37,53 +31,40 @@ internal class ServicePackageService : IServicePackageService
             };
         }
 
-        var exceptions = new ConcurrentQueue<Exception>();
-        var voucherTypeList = new ConcurrentBag<VoucherType>();
-        var options = new ParallelOptions
+        var voucherTypes = existedServicePackage.ValuableVoucherTypes!.ToList();
+        foreach (var item in model)
         {
-            MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling(Environment.ProcessorCount * 0.1 * 2))
-        };
-        Parallel.ForEach(voucherTypeIds, options, (id, state) =>
-        {
-            var existedVoucherType = _unitOfWork.VoucherTypes.Get(vt => vt.Id == id).FirstOrDefault();
-            if(existedVoucherType == null)
+            if (item.IsDeleted)
             {
-                exceptions.Enqueue(new ArgumentNullException(null, $"Không tìm thấy loại voucher: {id}"));
-                state.Stop();
-                return;
+                var existedVoucherType = voucherTypes.FirstOrDefault(vt => vt.Id == item.VoucherTypeId);
+                if(existedVoucherType is null)
+                {
+                    return new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Không tìm thấy loại voucher",
+                        Error = new List<string>() { $"Can not find applied voucher type with id '{item.VoucherTypeId}'" }
+                    };
+                }
+                voucherTypes.Remove(existedVoucherType);
             }
-            voucherTypeList.Add(existedVoucherType);
-        });
-
-        if (!exceptions.IsNullOrEmpty())
-        {
-            var message = exceptions.First().Message;
-            return new ServiceResponse
+            else
             {
-                IsSuccess = false,
-                Message = message.Split(":").First(),
-                Error = new List<string>() { "Voucher Type not found with the given id:" + message.Split(":").Last() }
-            };
+                var existedVoucherType = await _unitOfWork.VoucherTypes.FindAsync(item.VoucherTypeId);
+                if (existedVoucherType is null)
+                {
+                    return new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Không tìm thấy loại voucher",
+                        Error = new List<string>() { $"Can not find voucher type with id '{item.VoucherTypeId}'" }
+                    };
+                }
+                voucherTypes.Add(existedVoucherType);
+            }
         }
 
-        if (voucherTypeList.IsNullOrEmpty())
-        {
-            return new ServiceResponse
-            {
-                IsSuccess = false,
-                Message = "Danh sách loại voucher trống",
-                Error = new List<string>() { "Voucher list is null or empty" }
-            };
-        }
-
-        if (existedServicePackage.ValuableVoucherTypes.IsNullOrEmpty())
-        {
-            existedServicePackage.ValuableVoucherTypes = voucherTypeList.ToList();
-        }
-        else
-        {
-            existedServicePackage.ValuableVoucherTypes!.Concat(voucherTypeList).ToList();
-        }
+        existedServicePackage.ValuableVoucherTypes = voucherTypes;
 
         if (await _unitOfWork.SaveChangesAsync())
         {
@@ -104,9 +85,9 @@ internal class ServicePackageService : IServicePackageService
         }
     }
 
-    public async Task<ServiceResponse> UpdateInformation(int servicePackageId, ServicePackage updatedServicePackage)
+    public async Task<ServiceResponse> UpdateInformation(int servicePackageId, UpdatedServicePackageVM updatedServicePackage)
     {
-        var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.Id == servicePackageId).AsNoTracking().FirstOrDefaultAsync();
+        var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.Id == servicePackageId).FirstOrDefaultAsync();
         var checkServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.ServicePackageName == updatedServicePackage.ServicePackageName).AsNoTracking().FirstOrDefaultAsync();
 
         if (existedServicePackage == null)
@@ -129,10 +110,8 @@ internal class ServicePackageService : IServicePackageService
             };
         }
 
-        updatedServicePackage.IsDeleted = existedServicePackage.IsDeleted;
-        updatedServicePackage.Id = servicePackageId;
-
-        _unitOfWork.ServicePackages.Update(updatedServicePackage);
+        existedServicePackage.ServicePackageName = updatedServicePackage.ServicePackageName!;
+        existedServicePackage.Description = updatedServicePackage.Description;
 
         if (await _unitOfWork.SaveChangesAsync())
         {
@@ -155,7 +134,7 @@ internal class ServicePackageService : IServicePackageService
 
     public async Task<ServiceResponse> UpdateServiceOfServicePackage(IEnumerable<UpdatedServicesInPackageVM> model, int servicePackageId)
     {
-        var existedServicePackage = await _unitOfWork.ServicePackages.Get(s => s.Id == servicePackageId, sp => sp.Services).FirstOrDefaultAsync();
+        var existedServicePackage = await _unitOfWork.ServicePackages.Get(s => s.Id == servicePackageId, sp => sp.Services!).FirstOrDefaultAsync();
 
         if (existedServicePackage == null)
         {
@@ -167,36 +146,37 @@ internal class ServicePackageService : IServicePackageService
             };
         }
 
-        var services = existedServicePackage.Services.ToList();
+        var services = existedServicePackage.Services!.ToList();
 
         foreach(var item in model)
         {
-            var service = await _unitOfWork.Services.FindAsync(item.Id);
-            if (service == null)
+            if (item.IsDeleted)
             {
-                return new ServiceResponse
-                {
-                    IsSuccess = false,
-                    Message = "Không tìm thấy dịch vụ",
-                    Error = new List<string>() { $"Service '{item.Id}' not found" }
-                };
-            }
-
-            if (item.IsDelete)
-            {
-                if (!services.Remove(service))
+                var existedService = services.Where(s => s.Id == item.ServiceId).FirstOrDefault();
+                if(existedService is null)
                 {
                     return new ServiceResponse
                     {
                         IsSuccess = false,
-                        Message = $"Không thể xóa dịch vụ '{service.ServiceName}'",
-                        Error = new List<string>() { $"Service '{service.ServiceName}' is not in Service Package '{existedServicePackage.ServicePackageName}'" }
+                        Message = $"Không tìm thấy dịch vụ",
+                        Error = new List<string>() { $"Can not find service with id '{item.ServiceId}' in service package '{existedServicePackage.ServicePackageName}'" }
                     };
                 }
+                services.Remove(existedService);
             }
             else
             {
-                services.Add(service);
+                var existedService = await _unitOfWork.Services.FindAsync(item.ServiceId);
+                if (existedService == null)
+                {
+                    return new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Không tìm thấy dịch vụ",
+                        Error = new List<string>() { "Can not find service with the given id: " + item.ServiceId }
+                    };
+                }
+                services.Add(existedService);
             }
         }
 
@@ -224,7 +204,7 @@ internal class ServicePackageService : IServicePackageService
 
     public async Task<ServicePackage?> AddNewServicePackage(ServicePackage servicePackage, IEnumerable<int> servicesIds)
     {
-        var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => !sp.IsDeleted && sp.ServicePackageName == servicePackage.ServicePackageName).AsNoTracking().FirstOrDefaultAsync();
+        var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.ServicePackageName == servicePackage.ServicePackageName).AsNoTracking().FirstOrDefaultAsync();
         if(existedServicePackage != null)
         {
             throw new CustomException($"Gói dịch vụ '{existedServicePackage.ServicePackageName}' đã tồn tại")
@@ -256,17 +236,22 @@ internal class ServicePackageService : IServicePackageService
     public IEnumerable<ServicePackage> GetALlServicePackage()
     {
         Expression<Func<ServicePackage, object>>[] includes = {
-            sp => sp.Services,
+            sp => sp.Services!,
             sp => sp.ValuableVoucherTypes!
         };
-        return _unitOfWork.ServicePackages.Get(s => !s.IsDeleted, includes);
+        return _unitOfWork.ServicePackages.Get(s => !s.IsDeleted, includes).AsNoTracking();
+    }
+
+    public IEnumerable<ServicePackage> GetAllDeletedServicePackage()
+    {
+        return _unitOfWork.ServicePackages.Get(s => s.IsDeleted).AsNoTracking();
     }
 
     public ServicePackage? GetServicePackageById(int id)
     {
         Expression<Func<ServicePackage, bool>> where = sp => !sp.IsDeleted && sp.Id == id;
         Expression<Func<ServicePackage, object>>[] includes = {
-            sp => sp.Services,
+            sp => sp.Services!,
             sp => sp.ValuableVoucherTypes!
         };
         return _unitOfWork.ServicePackages.Get(where, includes)?.FirstOrDefault();
@@ -287,16 +272,44 @@ internal class ServicePackageService : IServicePackageService
 
         existedServicePackage.IsDeleted = true;
 
-        var log = new Log
+        if (await _unitOfWork.SaveDeletedChangesAsync())
         {
-            Type = (int)AuditType.Delete,
-            TableName = nameof(ServicePackage),
-            PrimaryKey = id.ToString()
-        };
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Xóa thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Xóa thất bại",
+                Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
 
-        await _unitOfWork.AuditLogs.AddAsync(log);
+    public async Task<ServiceResponse> SoftDeleteBatch(IEnumerable<int> ids)
+    {
+        foreach(var id in ids)
+        {
+            var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.Id == id && !sp.IsDeleted).FirstOrDefaultAsync();
+            if (existedServicePackage == null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy gói dịch vụ",
+                    Error = new List<string>() { "Can not find service package with the given id: " + id }
+                };
+            }
 
-        if (await _unitOfWork.SaveChangesAsync())
+            existedServicePackage.IsDeleted = true;
+        }
+
+        if (await _unitOfWork.SaveDeletedChangesAsync())
         {
             return new ServiceResponse
             {

@@ -1,8 +1,9 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Base.Core.Common;
+using System.ComponentModel.DataAnnotations;
 
 namespace Base.Core.Entity;
 
-public class Service
+public class Service : IAuditable
 {
     [Key]
     public int Id { get; set; }

@@ -18,6 +18,8 @@ public interface IUnitOfWork
     IRoleClaimRepository RoleClaims { get; }
     IAuditRepository AuditLogs { get; }
     Task<bool> SaveChangesAsync();
+    Task<bool> SaveDeletedChangesAsync();
+    Task<bool> SaveChangesNoLogAsync();
 }
 
 public class UnitOfWork : IUnitOfWork, IDisposable
@@ -69,6 +71,16 @@ public class UnitOfWork : IUnitOfWork, IDisposable
     public async Task<bool> SaveChangesAsync()
     {
         return (await _applicationDbContext.SaveChangesAsync()) > 0;
+    }
+
+    public async Task<bool> SaveDeletedChangesAsync()
+    {
+        return (await _applicationDbContext.SaveDeletedChangesAsync() > 0);
+    }
+
+    public async Task<bool> SaveChangesNoLogAsync()
+    {
+        return (await _applicationDbContext.SaveChangesNoLogAsync() > 0);
     }
 
     public void Dispose()

@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Metadata.Internal;
+﻿using Base.Core.Common;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -9,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace Base.Core.Entity;
 
-public class VoucherType
+public class VoucherType : IAuditable
 {
     [Key]
     public int Id { get; set; }

@@ -24,11 +24,20 @@ public class ServicesController : ControllerBase
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet]
+    [HttpGet("all")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseServiceVM>))]
     public IActionResult GetAllServices()
     {
         var result = _serviceService.GetAllService();
+        return Ok(_mapper.Map<IEnumerable<Service>, IEnumerable<ResponseServiceVM>>(result));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-delete")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseServiceVM>))]
+    public IActionResult GetAllDeletedServices()
+    {
+        var result = _serviceService.GetAllDeletedService();
         return Ok(_mapper.Map<IEnumerable<Service>, IEnumerable<ResponseServiceVM>>(result));
     }
 
@@ -114,7 +123,7 @@ public class ServicesController : ControllerBase
         {
             if (ModelState.IsValid)
             {
-                var result = await _serviceService.UpdateInformation(_mapper.Map<Service>(resource), serviceId);
+                var result = await _serviceService.UpdateInformation(resource, serviceId);
                 if (result.IsSuccess)
                 {
                     return Ok(result);

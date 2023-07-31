@@ -15,6 +15,7 @@ public interface IExpiredDateExtensionService
 {
     Task<ExpiredDateExtension?> AddNewExpiredDateExtension(ExpiredDateExtension expiredDateExtension, int VoucherId);
     IEnumerable<ExpiredDateExtension> GetAllExpiredDateExtensions();
+    IEnumerable<ExpiredDateExtension> GetAllDeletedExpiredDateExtensions();
     Task<ExpiredDateExtension?> GetExpiredDateExtensionById(int id);
     Task<ServiceResponse> UpdateVoucherExtension(UpdatedExpiredDateExtensionVM updatedExpiredDateExtension, int id);
     Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfUser();

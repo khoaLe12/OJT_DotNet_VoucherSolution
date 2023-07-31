@@ -4,14 +4,12 @@ using Base.API.Middleware;
 using Base.API.Permission;
 using Base.API.Services;
 using Base.Core.Application;
-using Base.Core.Entity;
-using Base.Core.Identity;
 using Base.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System;
 using System.Text;
 using static Base.API.Middleware.GlobalExceptionMiddleware;
 
@@ -27,11 +25,21 @@ namespace Base.API
 
         public void ConfigureServices(IServiceCollection services)
         {
+            var emailConfig = Configuration.GetSection("EmailConfig").Get<EmailConfig>();
+            services.AddSingleton(emailConfig);
+            services.AddTransient<IMailService,MailService>();
+
+            services.Configure<FormOptions>(o =>
+            {
+                o.ValueLengthLimit = int.MaxValue;
+                o.MultipartBodyLengthLimit = int.MaxValue;
+                o.MemoryBufferThreshold = int.MaxValue;
+            });
+
             services.AddAutoMapper(typeof(ItemMapper1), typeof(ItemMapper2));
             services.AddInfrastructure(Configuration);
 
-            services.AddScoped<IJWTTokenService<User>, JWTTokenService<User>>();
-            services.AddScoped<IJWTTokenService<Customer>, JWTTokenService<Customer>>();
+            services.AddScoped<IJWTTokenService, JWTTokenService>();
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             services.AddSingleton<ICurrentUserService,CurrentUserService>();
             services.AddSingleton<IAuthorizationPolicyProvider, AuthorizationPolicyProvider>();
@@ -49,6 +57,8 @@ namespace Base.API
                 })
                 .AddNewtonsoftJson(option =>
             option.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore);
+
+            services.AddRazorPages();
 
             services.AddSwaggerGen(c =>
             {
@@ -127,6 +137,11 @@ namespace Base.API
                     policy.Requirements.Add(new HasScopeRequirement("all", Configuration["Jwt:Issuer"]!));
                 });
 
+                options.AddPolicy("Restore", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("restore", Configuration["Jwt:Issuer"]!));
+                });
+
                 options.AddPolicy("User", policy =>
                 {
                     policy.Requirements.Add(new HasScopeRequirement("User", Configuration["Jwt:Issuer"]!));
@@ -170,6 +185,11 @@ namespace Base.API
                 options.AddPolicy("Role", policy =>
                 {
                     policy.Requirements.Add(new HasScopeRequirement("Role", Configuration["Jwt:Issuer"]!));
+                });
+
+                options.AddPolicy("Log", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("Log", Configuration["Jwt:Issuer"]!));
                 });
             });
 
@@ -225,6 +245,8 @@ namespace Base.API
 
             app.UseHttpsRedirection();
 
+            app.UseStaticFiles();
+
             app.UseCors("ClientPermission");
 
             app.UseRouting();
@@ -235,6 +257,7 @@ namespace Base.API
 
             app.UseEndpoints(endpoints =>
             {
+                endpoints.MapRazorPages();
                 endpoints.MapControllers();
             });
         }

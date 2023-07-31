@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Base.API.Services;
 using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.ViewModel;
@@ -17,19 +18,30 @@ public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly IMapper _mapper;
+    private readonly IMailService _mailService;
 
-    public UsersController(IUserService userService, IMapper mapper)
+    public UsersController(IUserService userService, IMapper mapper, IMailService mailService)
     {
         _userService = userService;
         _mapper = mapper;
+        _mailService = mailService;
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet("All-Users")]
+    [HttpGet("all-users")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
     public IActionResult GetAllUser()
     {
         var result = _userService.GetAllUser();
+        return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-deleted-users")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseUserInformationVM>))]
+    public IActionResult GetAllDeletedUser()
+    {
+        var result = _userService.GetAllDeletedUser();
         return Ok(_mapper.Map<IEnumerable<ResponseUserInformationVM>>(result));
     }
 
@@ -168,6 +180,48 @@ public class UsersController : ControllerBase
         });
     }
 
+    [AllowAnonymous]
+    [HttpPost("forget-password")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UserManagerResponse))]
+    public async Task<IActionResult> ForgetPassword([FromQuery] string email)
+    {
+        if (ModelState.IsValid)
+        {
+            var result = await _userService.ForgetPasswordAsync(email);
+            if (result.IsSuccess)
+            {
+                if(result.ConfirmEmailUrl is not null)
+                {
+                    var url = result.ConfirmEmailUrl;
+                    await _mailService.SendMailAsync(new Message
+                    {
+                        To = result.LoginUser!.Email,
+                        Subject = "Reset Password",
+                        Content = "<h2>Follow the instructions to reset your password</h2>" +
+                            $"<p>To reset your password <a href='{url}'>Click here</a></p>"
+                    });
+                    result.LoginUser = null;
+                    result.ConfirmEmailUrl = null;
+                }
+                return Ok(result);
+            }
+            else
+            {
+                return BadRequest(result);
+            }
+        }
+        else
+        {
+            return BadRequest(new UserManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ",
+                Errors = new List<string>() { "Invalid input" }
+            });
+        }
+    }
+
     [Authorize(Policy = "Update")]
     [HttpPost("Assign-Manager")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
@@ -199,15 +253,27 @@ public class UsersController : ControllerBase
     }
 
     [HttpPut]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UserManagerResponse))]
-    public async Task<IActionResult> UpdateInformation([FromBody] UpdateInformationVM resource)
+    public async Task<IActionResult> UpdateInformation([FromForm] UpdateInformationVM resource)
     {
         if (ModelState.IsValid)
         {
             var result = await _userService.UpdateInformation(resource);
             if (result.IsSuccess)
             {
+                if(result.ConfirmEmailUrl is not null)
+                {
+                    var url = result.ConfirmEmailUrl;
+                    await _mailService.SendMailAsync(new Message
+                    {
+                        To = result.LoginUser!.Email,
+                        Subject = "Confirm your email",
+                        Content = "<h2>Welcome to Voucher Solution</h2>" +
+                            $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
+                    });
+                }
                 return Ok(result);
             }
             else
@@ -244,6 +310,32 @@ public class UsersController : ControllerBase
         {
             IsSuccess = false,
             Message = "Dữ liệu không hợp lệ"
+        });
+    }
+
+    [Authorize(Policy = "Update")]
+    [HttpPatch("{userId}/Roles")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UserManagerResponse))]
+    public async Task<IActionResult> UpdateRolesOfUser(Guid userId, [FromBody] IEnumerable<UpdatedRolesOfUserVM> resource)
+    {
+        if (ModelState.IsValid)
+        {
+            var result = await _userService.UpdateRoleOfUser(userId, resource);
+            if (result.IsSuccess)
+            {
+                return Ok(result);
+            }
+            else
+            {
+                return BadRequest(result);
+            }
+        }
+        return BadRequest(new UserManagerResponse
+        {
+            IsSuccess = false,
+            Message = "Dữ liệu không hợp lệ",
+            Errors = new List<string>() { "Invalid input" }
         });
     }
 

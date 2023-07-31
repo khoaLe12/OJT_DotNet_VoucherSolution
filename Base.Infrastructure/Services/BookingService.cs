@@ -160,9 +160,9 @@ internal class BookingService : IBookingService
         }
     }
 
-    public async Task<ServiceResponse> UpdateBooking(Booking updatedBooking, int bookingId)
+    public async Task<ServiceResponse> UpdateBooking(UpdatedBookingVM updatedBooking, int bookingId)
     {
-        var existedBooking = await _unitOfWork.Bookings.Get(b => b.Id == bookingId).AsNoTracking().FirstOrDefaultAsync();
+        var existedBooking = await _unitOfWork.Bookings.Get(b => b.Id == bookingId).FirstOrDefaultAsync();
         if(existedBooking == null)
         {
             return new ServiceResponse
@@ -183,12 +183,14 @@ internal class BookingService : IBookingService
             };
         }
 
-        updatedBooking.Id = bookingId;
-        updatedBooking.SalesEmployeeId = existedBooking.SalesEmployeeId;
-        updatedBooking.CustomerId = existedBooking.CustomerId;
-        updatedBooking.ServicePackageId = existedBooking.ServicePackageId;
-        updatedBooking.IsDeleted = existedBooking.IsDeleted;
-        _unitOfWork.Bookings.Update(updatedBooking);
+        existedBooking.BookingTitle = updatedBooking.BookingTitle!;
+        existedBooking.BookingStatus = updatedBooking.BookingStatus;
+        existedBooking.TotalPrice = updatedBooking.TotalPrice;
+        existedBooking.PriceDetails = updatedBooking.PriceDetails;
+        existedBooking.Note = updatedBooking.Note;
+        existedBooking.Descriptions = updatedBooking.Descriptions;
+        existedBooking.StartDateTime = updatedBooking.StartDateTime;
+        existedBooking.EndDateTime = updatedBooking.EndDateTime;
 
         if (await _unitOfWork.SaveChangesAsync())
         {
@@ -248,15 +250,15 @@ internal class BookingService : IBookingService
 
         if (VoucherIds != null)
         {
+            var result = await _unitOfWork.Vouchers.Get(v => VoucherIds.Contains(v.Id), v => v.VoucherType!).ToListAsync();
             var exceptions = new ConcurrentQueue<Exception>();
-            var voucherList = new ConcurrentBag<Voucher>();
             var options = new ParallelOptions
             {
                 MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling(Environment.ProcessorCount * 0.1 * 2))
             };
             Parallel.ForEach(VoucherIds, options, (id, state) =>
             {
-                var voucher = _unitOfWork.Vouchers.Get(v => v.Id == id, v => v.VoucherType!).FirstOrDefault();
+                var voucher = result.Find(v => v.Id == id);
                 if (voucher == null)
                 {
                     exceptions.Enqueue(new ArgumentNullException(null, $"Không tìm thấy voucher:{id}"));
@@ -274,17 +276,15 @@ internal class BookingService : IBookingService
                     return;
                 }
 
-            if (!servicePackage.ValuableVoucherTypes!.Contains(voucher.VoucherType))
-            {
-                exceptions.Enqueue(new CustomException($"Voucher '{voucher.VoucherType!.TypeName}' không áp dụng cho gói dịch vụ '{servicePackage.ServicePackageName}'")
+                if (!servicePackage.ValuableVoucherTypes!.Contains(voucher.VoucherType))
                 {
-                    Errors = new List<string>() { $"Voucher type '{voucher.VoucherType!.TypeName}' are not applied on '{servicePackage.ServicePackageName}'" }
-                });
+                    exceptions.Enqueue(new CustomException($"Voucher '{voucher.VoucherType!.TypeName}' không áp dụng cho gói dịch vụ '{servicePackage.ServicePackageName}'")
+                    {
+                        Errors = new List<string>() { $"Voucher type '{voucher.VoucherType!.TypeName}' are not applied on '{servicePackage.ServicePackageName}'" }
+                    });
                     state.Stop();
                     return;
                 }
-
-                voucherList.Add(voucher);
             });
 
             if (!exceptions.IsNullOrEmpty())
@@ -292,7 +292,7 @@ internal class BookingService : IBookingService
                 throw exceptions.First();
             }
 
-            booking.Vouchers = voucherList.ToList();
+            booking.Vouchers = result;
         }
 
         booking.SalesEmployee = salesEmployee;
@@ -311,6 +311,11 @@ internal class BookingService : IBookingService
     public IEnumerable<Booking> GetAllBookings()
     {
         return _unitOfWork.Bookings.FindAll().Where(b => !b.IsDeleted);
+    }
+
+    public IEnumerable<Booking> GetAllDeletedBookings()
+    {
+        return _unitOfWork.Bookings.FindAll().Where(b => b.IsDeleted);
     }
 
     public async Task<Booking?> GetBookingById(int id)
@@ -335,6 +340,16 @@ internal class BookingService : IBookingService
             throw new ArgumentNullException(null, $"User Not Found with the given id: {userId}");
         }
         return await _unitOfWork.Bookings.Get(b => b.SalesEmployeeId == userId && !b.IsDeleted).AsNoTracking().ToListAsync();
+    }
+
+    public async Task<IEnumerable<Booking>> GetAllBookingOfCustomerById(Guid customerId)
+    {
+        var customer = await _unitOfWork.Customers.FindAsync(customerId);
+        if(customer is null)
+        {
+            throw new ArgumentNullException(null, $"Customer Not Found with the given id: {customerId}");
+        }
+        return await _unitOfWork.Bookings.Get(b => !b.IsDeleted && b.CustomerId == customerId).AsNoTracking().ToListAsync();
     }
 
     public async Task<IEnumerable<Booking>> GetAllBookingOfCustomer()
@@ -363,16 +378,7 @@ internal class BookingService : IBookingService
 
         existedBooking.IsDeleted = true;
 
-        var log = new Log
-        {
-            Type = (int)AuditType.Delete,
-            TableName = nameof(Booking),
-            PrimaryKey = bookingId.ToString()
-        };
-
-        await _unitOfWork.AuditLogs.AddAsync(log);
-
-        if(await _unitOfWork.SaveChangesAsync())
+        if(await _unitOfWork.SaveDeletedChangesAsync())
         {
             return new ServiceResponse
             {

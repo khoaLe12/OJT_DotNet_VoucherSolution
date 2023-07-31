@@ -8,6 +8,18 @@ using System.Threading.Tasks;
 
 namespace Base.Core.ViewModel;
 
+public class ResponseLogVM
+{
+    public int Id { get; set; }
+    public string? ActionType { get; set; }
+    public string? CreatedBy { get; set; }
+    public string? UserName { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? EntityName { get; set; }
+    public string? EntityId { get; set; }
+    public Dictionary<string,object>? Changes { get; set; }
+}
+
 public class ResponseCustomerInformationVM
 {
     public Guid Id { get; set; }
@@ -24,6 +36,7 @@ public class ResponseCustomerInformationVM
     public bool IsBlocked { get; set; }
     public IEnumerable<ResponseBookingVM>? Bookings { get; set; }
     public IEnumerable<ResponseVoucherVM>? Vouchers { get; set; }
+    public string? FilePath { get; set; }
 }
 
 public class ResponseUserInformationVM
@@ -44,7 +57,15 @@ public class ResponseUserInformationVM
     public bool IsBlocked { get; set; }
     public ResponseUserVM? SalesManager { get; set; }
     public IEnumerable<ResponseCustomerVM>? Customers { get; set; }
-    public IEnumerable<ResponseRoleVM>? Roles { get; set; }
+    public IEnumerable<ResponseRoleForUserVM>? Roles { get; set; }
+    public string? FilePath { get; set; }
+}
+
+public class ResponseRoleForUserVM
+{
+    public Guid Id { get; set; }
+    public string? NormalizedName { get; set; }
+    public bool IsManager { get; set; }
 }
 
 public class ResponseRoleVM
@@ -93,8 +114,8 @@ public class ResponseServicePackageVM
 public class ResponseBookingVM
 {
     public int Id { get; set; }
-    public ResponseCustomerVM Customer { get; set; } = new();
-    public ResponseUserVM SalesEmployee { get; set; } = new();
+    public ResponseCustomerVM? Customer { get; set; }
+    public ResponseUserVM? SalesEmployee { get; set; }
     public IEnumerable<ResponseVoucherForBookingVM>? Vouchers { get; set; }
     public ResponseServicePackageVM? ServicePackage { get; set; }
     public string? BookingTitle { get; set; }

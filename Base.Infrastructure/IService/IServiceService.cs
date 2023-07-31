@@ -15,7 +15,8 @@ public interface IServiceService
 {
     Task<Service?> AddNewService(Service service);
     IEnumerable<Service> GetAllService();
+    IEnumerable<Service> GetAllDeletedService();
     Task<Service?> GetServiceById(int id);
-    Task<ServiceResponse> UpdateInformation(Service updatedService, int serviceId);
+    Task<ServiceResponse> UpdateInformation(ServiceVM updatedService, int serviceId);
     Task<ServiceResponse> SoftDelete(int id);
 }

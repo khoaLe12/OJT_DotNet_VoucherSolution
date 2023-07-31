@@ -2,11 +2,9 @@
 using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.Enum;
-using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
-using Base.Infrastructure.Migrations;
 using Duende.IdentityServer.Extensions;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -223,6 +221,11 @@ internal class VoucherService : IVoucherService
         return _unitOfWork.Vouchers.FindAll().Where(v => !v.IsDeleted);
     }
 
+    public IEnumerable<Voucher> GetAllDeletedVoucher()
+    {
+        return _unitOfWork.Vouchers.FindAll().Where(v => v.IsDeleted);
+    }
+
     public async Task<IEnumerable<Voucher>> GetAllVoucherOfUser()
     {
         var userId = _currentUserService.UserId;
@@ -243,6 +246,16 @@ internal class VoucherService : IVoucherService
             throw new ArgumentNullException(null, "Không tìm thấy người dùng");
         }
         return await _unitOfWork.Vouchers.Get(v => !v.IsDeleted && v.CustomerId == userId).AsNoTracking().ToListAsync();
+    }
+
+    public async Task<IEnumerable<Voucher>> GetAllVoucherOfCustomerById(Guid customerId)
+    {
+        var customer = await _unitOfWork.Customers.FindAsync(customerId);
+        if (customer is null)
+        {
+            throw new ArgumentNullException(null, $"Customer Not Found with the given id: {customerId}");
+        }
+        return await _unitOfWork.Vouchers.Get(v => !v.IsDeleted && v.CustomerId == customerId).AsNoTracking().ToListAsync();
     }
 
     public async Task<Voucher?> GetVoucherById(int id)
@@ -274,16 +287,7 @@ internal class VoucherService : IVoucherService
 
         existedVoucher.IsDeleted = true;
 
-        var log = new Log
-        {
-            Type = (int)AuditType.Delete,
-            TableName = nameof(Voucher),
-            PrimaryKey = id.ToString()
-        };
-
-        await _unitOfWork.AuditLogs.AddAsync(log);
-
-        if (await _unitOfWork.SaveChangesAsync())
+        if (await _unitOfWork.SaveDeletedChangesAsync())
         {
             return new ServiceResponse
             {

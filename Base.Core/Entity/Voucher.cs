@@ -1,11 +1,12 @@
-﻿using Base.Core.Identity;
+﻿using Base.Core.Common;
+using Base.Core.Identity;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Base.Core.Entity;
 
-public class Voucher
+public class Voucher : IAuditable
 {
     [Key]
     public int Id { get; set; }

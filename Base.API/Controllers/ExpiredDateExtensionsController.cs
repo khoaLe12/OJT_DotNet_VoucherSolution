@@ -24,11 +24,20 @@ namespace Base.API.Controllers
         }
 
         [Authorize(Policy = "All")]
-        [HttpGet]
+        [HttpGet("all")]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseExpiredDateExtensionVM>))]
         public IActionResult GetAllExpiredDateExtensions()
         {
             var result = _expiredDateExtensionService.GetAllExpiredDateExtensions();
+            return Ok(_mapper.Map<IEnumerable<ResponseExpiredDateExtensionVM>>(result));
+        }
+
+        [Authorize(Policy = "All")]
+        [HttpGet("all-delete")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseExpiredDateExtensionVM>))]
+        public IActionResult GetAllDeletedExpiredDateExtensions()
+        {
+            var result = _expiredDateExtensionService.GetAllDeletedExpiredDateExtensions();
             return Ok(_mapper.Map<IEnumerable<ResponseExpiredDateExtensionVM>>(result));
         }
 

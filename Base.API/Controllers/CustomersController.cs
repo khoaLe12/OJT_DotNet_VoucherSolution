@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Base.API.Services;
 using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.Identity;
@@ -20,19 +21,30 @@ public class CustomersController : ControllerBase
 {
     private readonly ICustomerService _customerService;
     private readonly IMapper _mapper;
+    private readonly IMailService _mailService;
 
-    public CustomersController(ICustomerService customerService, IMapper mapper)
+    public CustomersController(ICustomerService customerService, IMapper mapper, IMailService mailService)
     {
         _customerService = customerService;
         _mapper = mapper;
+        _mailService = mailService;
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet("All-Customers")]
+    [HttpGet("all-customers")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseCustomerInformationVM>))]
     public IActionResult GetAllCustomer()
     {
         var result = _customerService.GetAllCustomers();
+        return Ok(_mapper.Map<IEnumerable<ResponseCustomerInformationVM>>(result));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-deleted-customers")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseCustomerInformationVM>))]
+    public IActionResult GetAllDeletedCustomer()
+    {
+        var result = _customerService.GetAllDeletedCustomers();
         return Ok(_mapper.Map<IEnumerable<ResponseCustomerInformationVM>>(result));
     }
 
@@ -131,11 +143,54 @@ public class CustomersController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
+    [HttpPost("forget-password")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CustomerManagerResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(CustomerManagerResponse))]
+    public async Task<IActionResult> ForgetPassword([FromQuery] string email)
+    {
+        if (ModelState.IsValid)
+        {
+            var result = await _customerService.ForgetPasswordAsync(email);
+            if (result.IsSuccess)
+            {
+                if (result.ConfirmEmailUrl is not null)
+                {
+                    var url = result.ConfirmEmailUrl;
+                    await _mailService.SendMailAsync(new Message
+                    {
+                        To = result.LoginCustomer!.Email,
+                        Subject = "Reset Password",
+                        Content = "<h2>Follow the instructions to reset your password</h2>" +
+                            $"<p>To reset your password <a href='{url}'>Click here</a></p>"
+                    });
+                    result.LoginCustomer = null;
+                    result.ConfirmEmailUrl = null;
+                }
+                return Ok(result);
+            }
+            else
+            {
+                return BadRequest(result);
+            }
+        }
+        else
+        {
+            return BadRequest(new UserManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ",
+                Errors = new List<string>() { "Invalid input" }
+            });
+        }
+    }
+
     [HttpPut]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CustomerManagerResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(CustomerManagerResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> UpdateInformation([FromBody] UpdateInformationVM resource)
+    public async Task<IActionResult> UpdateInformation([FromForm] UpdateInformationVM resource)
     {
         try
         {
@@ -144,6 +199,17 @@ public class CustomersController : ControllerBase
                 var result = await _customerService.UpdateInformation(resource);
                 if (result.IsSuccess)
                 {
+                    if (result.ConfirmEmailUrl is not null)
+                    {
+                        var url = result.ConfirmEmailUrl;
+                        await _mailService.SendMailAsync(new Message
+                        {
+                            To = result.LoginCustomer!.Email,
+                            Subject = "Confirm your email",
+                            Content = "<h2>Welcome to Voucher Solution</h2>" +
+                                    $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
+                        });
+                    }
                     return Ok(result);
                 }
                 else
@@ -169,17 +235,17 @@ public class CustomersController : ControllerBase
     }
 
     [Authorize(Policy = "Write")]
-    [HttpPatch("{userId}")]
+    [HttpPatch("{CustomerId}")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CustomerManagerResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(CustomerManagerResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> PatchUpdate(Guid userId, [FromBody] JsonPatchDocument<Customer> patchDoc)
+    public async Task<IActionResult> PatchUpdate(Guid CustomerId, [FromBody] JsonPatchDocument<Customer> patchDoc)
     {
         try
         {
             if (ModelState.IsValid && patchDoc != null)
             {
-                var result = await _customerService.PatchUpdate(userId, patchDoc, ModelState);
+                var result = await _customerService.PatchUpdate(CustomerId, patchDoc, ModelState);
                 if (result.IsSuccess)
                 {
                     return Ok(result);
@@ -206,18 +272,57 @@ public class CustomersController : ControllerBase
         }
     }
 
-    [Authorize(Policy = "Delete")]
-    [HttpDelete("{userId}")]
-    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
-    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [Authorize(Policy = "Update")]
+    [HttpPatch("assign-supporters/{CustomerId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CustomerManagerResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(CustomerManagerResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> SoftDeleteUser(Guid userId)
+    public async Task<IActionResult> AssignSupporters(Guid CustomerId, [FromBody] IEnumerable<AssignSupporterVM> resource)
     {
         try
         {
             if (ModelState.IsValid)
             {
-                var result = await _customerService.SoftDelete(userId);
+                var result = await _customerService.AssignSupporter(CustomerId, resource);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            return BadRequest(new UserManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ",
+                Errors = new List<string>() { "Invalid Input" }
+            });
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Delete")]
+    [HttpDelete("{CustomerId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> SoftDeleteUser(Guid CustomerId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _customerService.SoftDelete(CustomerId);
                 if (result.IsSuccess)
                 {
                     return Ok(result);

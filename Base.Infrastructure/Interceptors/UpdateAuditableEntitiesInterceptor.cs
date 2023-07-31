@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Base.Core.Application;
+using System.Diagnostics;
+using Base.Core.Entity;
 
 namespace Base.Infrastructure.Interceptors;
 
@@ -26,15 +28,13 @@ public sealed class UpdateAuditableEntitiesInterceptor : SaveChangesInterceptor
             return base.SavingChangesAsync(eventData, result, cancellationToken);
         }
 
-        IEnumerable<EntityEntry<AuditableEntity>> entries = dbContext.ChangeTracker.Entries<AuditableEntity>();
-
-        foreach (EntityEntry<AuditableEntity> entityEntry in entries)
+        foreach (var entry in dbContext.ChangeTracker.Entries())
         {
-            if(entityEntry.State == EntityState.Added)
+            if(entry.State == EntityState.Detached || entry.State == EntityState.Unchanged || !(entry.Entity is IAuditable))
             {
-                entityEntry.Entity.CreatedBy = _currentUserService.UserId;
-                entityEntry.Entity.CreatedAt = DateTime.UtcNow;
+                continue;
             }
+
         }
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);

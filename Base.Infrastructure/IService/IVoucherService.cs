@@ -15,8 +15,10 @@ public interface IVoucherService
 {
     Task<Voucher?> AddNewVoucher(Voucher voucher, Guid CustomerId, int VoucherTypeId);
     IEnumerable<Voucher> GetAllVoucher();
+    IEnumerable<Voucher> GetAllDeletedVoucher();
     Task<IEnumerable<Voucher>> GetAllVoucherOfUser();
     Task<IEnumerable<Voucher>> GetAllVoucherOfCustomer();
+    Task<IEnumerable<Voucher>> GetAllVoucherOfCustomerById(Guid customerId);
     Task<Voucher?> GetVoucherById(int id);
     Task<ServiceResponse> PatchUpdate(int voucherId, JsonPatchDocument<Voucher> patchDoc, ModelStateDictionary ModelState);
     Task<ServiceResponse> UpdateVoucher(UpdatedVoucherVM updatedVoucher, int voucherId);

@@ -24,11 +24,20 @@ public class BookingsController : ControllerBase
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet]
+    [HttpGet("all")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseBookingVM>))]
     public IActionResult GetAllBookings()
     {
         var result = _bookingService.GetAllBookings();
+        return Ok(_mapper.Map<IEnumerable<ResponseBookingVM>>(result));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-delete")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseBookingVM>))]
+    public IActionResult GetAllDeletedBookings()
+    {
+        var result = _bookingService.GetAllDeletedBookings();
         return Ok(_mapper.Map<IEnumerable<ResponseBookingVM>>(result));
     }
 
@@ -113,6 +122,40 @@ public class BookingsController : ControllerBase
             });
         }
         catch(ArgumentNullException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Read")]
+    [HttpGet("Customer/{customerId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseBookingVM>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetAllBookingsOfCustomerById(Guid customerId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _bookingService.GetAllBookingOfCustomerById(customerId);
+                return Ok(_mapper.Map<IEnumerable<ResponseBookingVM>>(result));
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (ArgumentNullException ex)
         {
             return BadRequest(new ServiceResponse
             {
@@ -224,7 +267,8 @@ public class BookingsController : ControllerBase
                 return BadRequest(new ServiceResponse
                 {
                     IsSuccess = false,
-                    Message = "Dữ liệu không hợp lệ"
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
                 });
             }
         }
@@ -250,7 +294,7 @@ public class BookingsController : ControllerBase
         {
             if (ModelState.IsValid)
             {
-                var result = await _bookingService.UpdateBooking(_mapper.Map<Booking>(resource), bookingId);
+                var result = await _bookingService.UpdateBooking(resource, bookingId);
                 if (result.IsSuccess)
                 {
                     return Ok(result);

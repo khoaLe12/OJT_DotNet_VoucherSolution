@@ -10,12 +10,13 @@ using System.Text;
 
 namespace Base.API.Services
 {
-    public interface IJWTTokenService<T> where T : IdentityUser<Guid>
+    public interface IJWTTokenService
     {
-        Task<string> CreateToken(T user);
+        string CreateToken(User user);
+        string CreateToken(Customer customer);
     }
 
-    public class JWTTokenService<T> : IJWTTokenService<T> where T : IdentityUser<Guid>
+    public class JWTTokenService : IJWTTokenService
     {
         private readonly IConfiguration _configuration;
         private readonly IRoleService _roleService;
@@ -26,9 +27,9 @@ namespace Base.API.Services
             _roleService = roleService;
         }
 
-        public async Task<string> CreateToken(T user)
+        public string CreateToken(User user)
         {
-            var roleClaims = await _roleService.GetRoleClaimsOfUser(user.Id);
+            var roleClaims = _roleService.GetRoleClaimsOfUser(user);
 
             var claims = new List<System.Security.Claims.Claim>
             {
@@ -41,10 +42,27 @@ namespace Base.API.Services
                 claims.AddRange(roleClaims);
             }
 
-            if(user is Customer)
+            var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]!));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Issuer"],
+                claims: claims,
+                expires: DateTime.Now.AddHours(2),
+                signingCredentials: creds);
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        public string CreateToken(Customer customer)
+        {
+            var claims = new List<System.Security.Claims.Claim>
             {
-                claims.Add(new Claim("scope", "User Customer Booking Voucher VoucherExtension"));
-            }
+                new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, customer.Id.ToString()),
+                new System.Security.Claims.Claim(ClaimTypes.Name, customer.Name ?? customer.UserName!),
+            };
+
+            claims.Add(new Claim("scope", "User Customer Booking Voucher VoucherExtension"));
 
             var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -52,7 +70,7 @@ namespace Base.API.Services
             var token = new JwtSecurityToken(issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Issuer"],
                 claims: claims,
-                expires: DateTime.Now.AddMinutes(30),
+                expires: DateTime.Now.AddHours(2),
                 signingCredentials: creds);
 
             return new JwtSecurityTokenHandler().WriteToken(token);

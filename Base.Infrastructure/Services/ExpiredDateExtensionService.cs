@@ -134,7 +134,12 @@ internal class ExpiredDateExtensionService : IExpiredDateExtensionService
         Expression<Func<ExpiredDateExtension, object>>[] includes = {
             e => e.Voucher!
         };
-        return _unitOfWork.ExpiredDateExtensions.Get(e => !e.IsDeleted, includes);
+        return _unitOfWork.ExpiredDateExtensions.Get(e => !e.IsDeleted, includes).AsNoTracking();
+    }
+
+    public IEnumerable<ExpiredDateExtension> GetAllDeletedExpiredDateExtensions()
+    {
+        return _unitOfWork.ExpiredDateExtensions.Get(e => e.IsDeleted).AsNoTracking();
     }
 
     public async Task<ExpiredDateExtension?> GetExpiredDateExtensionById(int id)
@@ -215,16 +220,7 @@ internal class ExpiredDateExtensionService : IExpiredDateExtensionService
             _unitOfWork.Vouchers.Update(voucher);
         }
 
-        var log = new Log
-        {
-            Type = (int)AuditType.Delete,
-            TableName = nameof(ExpiredDateExtension),
-            PrimaryKey = id.ToString()
-        };
-
-        await _unitOfWork.AuditLogs.AddAsync(log);
-
-        if (await _unitOfWork.SaveChangesAsync())
+        if (await _unitOfWork.SaveDeletedChangesAsync())
         {
             return new ServiceResponse
             {

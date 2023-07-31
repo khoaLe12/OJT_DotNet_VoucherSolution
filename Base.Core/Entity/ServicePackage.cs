@@ -1,8 +1,9 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Base.Core.Common;
+using System.ComponentModel.DataAnnotations;
 
 namespace Base.Core.Entity;
 
-public class ServicePackage
+public class ServicePackage : IAuditable
 {
     [Key]
     public int Id { get; set; }
@@ -13,7 +14,7 @@ public class ServicePackage
     //A list of Voucher Type that can be applied to the Service Package
     public IEnumerable<VoucherType>? ValuableVoucherTypes { get; set; }
     public IEnumerable<Booking>? Bookings { get; set; }
-    public IEnumerable<Service> Services { get; set; } = new List<Service>();
+    public IEnumerable<Service>? Services { get; set; }
 
     public bool IsDeleted { get; set; } = false;
 }

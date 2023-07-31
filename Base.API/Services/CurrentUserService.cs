@@ -14,5 +14,9 @@ public class CurrentUserService : ICurrentUserService
 
     public Guid UserId => 
         Guid.Parse(_httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? 
-            throw new InvalidOperationException("User is not logged in"));
+            throw new InvalidOperationException("Unauthenticated User"));
+
+    public string UserName => 
+        _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Name) ??
+            throw new InvalidOperationException("Unauthenticated User");
 }

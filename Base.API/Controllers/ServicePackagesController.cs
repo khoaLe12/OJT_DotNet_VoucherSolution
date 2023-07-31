@@ -24,11 +24,20 @@ public class ServicePackagesController : ControllerBase
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet]
+    [HttpGet("all")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseServicePackageVM>))]
     public IActionResult GetAllServicePackages()
     {
         var result = _servicePackageService.GetALlServicePackage();
+        return Ok(_mapper.Map<IEnumerable<ServicePackage>, IEnumerable<ResponseServicePackageVM>>(result));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-delete")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseServicePackageVM>))]
+    public IActionResult GetAllDeletedServicePackages()
+    {
+        var result = _servicePackageService.GetAllDeletedServicePackage();
         return Ok(_mapper.Map<IEnumerable<ServicePackage>, IEnumerable<ResponseServicePackageVM>>(result));
     }
 
@@ -126,17 +135,17 @@ public class ServicePackagesController : ControllerBase
     }
 
     [Authorize(Policy = "Update")]
-    [HttpPost("VoucherTypes/{servicePackageId}")]
+    [HttpPatch("VoucherTypes/{servicePackageId}")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> ApplyVoucherTypes(int servicePackageId, IEnumerable<int> resource)
+    public async Task<IActionResult> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<UpdatedVoucherTypesInPackageVM> resource)
     {
         try
         {
             if (ModelState.IsValid)
             {
-                var result = await _servicePackageService.ApplyVoucherType(servicePackageId, resource);
+                var result = await _servicePackageService.UpdateVoucherTypesOnServicePackage(servicePackageId, resource);
                 if (result.IsSuccess)
                 {
                     return Ok(result);
@@ -178,7 +187,7 @@ public class ServicePackagesController : ControllerBase
         {
             if (ModelState.IsValid)
             {
-                var result = await _servicePackageService.UpdateInformation(servicePackageId, _mapper.Map<ServicePackage>(resource));
+                var result = await _servicePackageService.UpdateInformation(servicePackageId, resource);
                 if (result.IsSuccess)
                 {
                     return Ok(result);
@@ -294,6 +303,48 @@ public class ServicePackagesController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Delete")]
+    [HttpDelete("batch")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> SoftDeleteServicePackages([FromBody] IEnumerable<int> resource)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _servicePackageService.SoftDeleteBatch(resource);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
             {
                 IsSuccess = false,
                 Message = "Cập nhật thất bại",

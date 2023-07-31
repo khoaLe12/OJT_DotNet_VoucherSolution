@@ -88,9 +88,9 @@ internal class VoucherTypeService : IVoucherTypeService
         }
     }
 
-    public async Task<ServiceResponse> UpdateVoucherType(VoucherType updatedVoucherType, int voucherTypeId)
+    public async Task<ServiceResponse> UpdateVoucherType(UpdatedVoucherTypeVM updatedVoucherType, int voucherTypeId)
     {
-        var existedVoucherType = await _unitOfWork.VoucherTypes.Get(vt => vt.Id == voucherTypeId).AsNoTracking().FirstOrDefaultAsync();
+        var existedVoucherType = await _unitOfWork.VoucherTypes.FindAsync(voucherTypeId);
         if (existedVoucherType == null)
         {
             return new ServiceResponse
@@ -101,8 +101,14 @@ internal class VoucherTypeService : IVoucherTypeService
             };
         }
 
-        updatedVoucherType.Id = voucherTypeId;
-        _unitOfWork.VoucherTypes.Update(updatedVoucherType);
+        existedVoucherType.TypeName = updatedVoucherType.TypeName!;
+        existedVoucherType.IsAvailable = updatedVoucherType.IsAvailable;
+        existedVoucherType.CommonPrice = updatedVoucherType.CommonPrice;
+        existedVoucherType.AvailableNumberOfVouchers = updatedVoucherType.AvailableNumberOfVouchers;
+        existedVoucherType.PercentageDiscount = updatedVoucherType.PercentageDiscount;
+        existedVoucherType.ValueDiscount = updatedVoucherType.ValueDiscount;
+        existedVoucherType.MaximumValueDiscount = updatedVoucherType.MaximumValueDiscount;
+        existedVoucherType.ConditionsAndPolicies = updatedVoucherType.ConditionsAndPolicies;
 
         if (await _unitOfWork.SaveChangesAsync())
         {
@@ -125,11 +131,11 @@ internal class VoucherTypeService : IVoucherTypeService
 
     public async Task<VoucherType?> AddNewVoucherType(VoucherType voucherType, IEnumerable<int>? ServicePackageIds)
     {
-        var existedVoucherType = await _unitOfWork.VoucherTypes.Get(vt => !vt.IsDeleted && vt.TypeName == voucherType.TypeName).FirstOrDefaultAsync();
+        /*var existedVoucherType = await _unitOfWork.VoucherTypes.Get(vt => !vt.IsDeleted && vt.TypeName == voucherType.TypeName).FirstOrDefaultAsync();
         if(existedVoucherType != null)
         {
             throw new ArgumentException($"Loại voucher '{existedVoucherType.TypeName}' đã tồn tại");
-        }
+        }*/
 
         if (ServicePackageIds != null)
         {
@@ -159,6 +165,11 @@ internal class VoucherTypeService : IVoucherTypeService
         return _unitOfWork.VoucherTypes.FindAll().Where(vt => !vt.IsDeleted);
     }
 
+    public IEnumerable<VoucherType> GetAllDeletedVoucherTypes()
+    {
+        return _unitOfWork.VoucherTypes.FindAll().Where(vt => vt.IsDeleted);
+    }
+
     public VoucherType? GetVoucherTypeById(int id)
     {
         Expression<Func<VoucherType, bool>> where = vt => !vt.IsDeleted && vt.Id == id;
@@ -184,16 +195,7 @@ internal class VoucherTypeService : IVoucherTypeService
 
         existedVoucherType.IsDeleted = true;
 
-        var log = new Log
-        {
-            Type = (int)AuditType.Delete,
-            TableName = nameof(VoucherType),
-            PrimaryKey = id.ToString()
-        };
-
-        await _unitOfWork.AuditLogs.AddAsync(log);
-
-        if (await _unitOfWork.SaveChangesAsync())
+        if (await _unitOfWork.SaveDeletedChangesAsync())
         {
             return new ServiceResponse
             {

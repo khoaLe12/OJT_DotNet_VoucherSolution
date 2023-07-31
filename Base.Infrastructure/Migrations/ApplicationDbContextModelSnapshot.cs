@@ -78,7 +78,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasIndex("ServicePackageId");
 
-                    b.ToTable("Bookings");
+                    b.ToTable("Bookings", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Entity.ExpiredDateExtension", b =>
@@ -116,7 +116,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasIndex("VoucherId");
 
-                    b.ToTable("ExpiredDateExtensions");
+                    b.ToTable("ExpiredDateExtensions", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Entity.Log", b =>
@@ -127,19 +127,13 @@ namespace Base.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AffectedColumns")
+                    b.Property<string>("Changes")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("NewValue")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("OldValue")
+                    b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PrimaryKey")
@@ -151,9 +145,12 @@ namespace Base.Infrastructure.Migrations
                     b.Property<int>("Type")
                         .HasColumnType("int");
 
+                    b.Property<string>("UserName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
 
-                    b.ToTable("Logs");
+                    b.ToTable("Logs", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Entity.Service", b =>
@@ -176,7 +173,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Services");
+                    b.ToTable("Services", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Entity.ServicePackage", b =>
@@ -199,7 +196,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ServicePackages");
+                    b.ToTable("ServicePackages", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Entity.User", b =>
@@ -224,6 +221,9 @@ namespace Base.Infrastructure.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsBlocked")
                         .HasColumnType("bit");
@@ -330,7 +330,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasIndex("VoucherTypeId");
 
-                    b.ToTable("Vouchers");
+                    b.ToTable("Vouchers", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Entity.VoucherType", b =>
@@ -371,7 +371,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("VoucherTypes");
+                    b.ToTable("VoucherTypes", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Identity.Customer", b =>
@@ -394,6 +394,9 @@ namespace Base.Infrastructure.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsBlocked")
                         .HasColumnType("bit");
@@ -449,7 +452,7 @@ namespace Base.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[PhoneNumber] IS NOT NULL");
 
-                    b.ToTable("Customers");
+                    b.ToTable("Customers", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Identity.Role", b =>
@@ -479,9 +482,7 @@ namespace Base.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedName")
-                        .IsUnique()
-                        .HasDatabaseName("RoleNameIndex")
-                        .HasFilter("[NormalizedName] IS NOT NULL");
+                        .HasDatabaseName("RoleNameIndex");
 
                     b.ToTable("AspNetRoles", (string)null);
                 });
@@ -499,9 +500,6 @@ namespace Base.Infrastructure.Migrations
 
                     b.Property<string>("ClaimValue")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
 
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier");
@@ -525,7 +523,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasIndex("VouchersId");
 
-                    b.ToTable("BookingVoucher");
+                    b.ToTable("BookingVoucher", (string)null);
                 });
 
             modelBuilder.Entity("CustomerUser", b =>
@@ -540,7 +538,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasIndex("SalesEmployeesId");
 
-                    b.ToTable("CustomerUser");
+                    b.ToTable("CustomerUser", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
@@ -570,7 +568,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasIndex("ServicePackageId");
 
-                    b.ToTable("SeviceInPackages");
+                    b.ToTable("SeviceInPackages", (string)null);
                 });
 
             modelBuilder.Entity("VoucherTypeServicePackage", b =>
@@ -585,7 +583,7 @@ namespace Base.Infrastructure.Migrations
 
                     b.HasIndex("VoucherTypeId");
 
-                    b.ToTable("VoucherTypeServicePackage");
+                    b.ToTable("VoucherTypeServicePackage", (string)null);
                 });
 
             modelBuilder.Entity("Base.Core.Entity.Booking", b =>

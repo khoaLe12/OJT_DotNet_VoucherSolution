@@ -1,4 +1,5 @@
 ﻿using Base.Core.Common;
+using Base.Core.Entity;
 using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Microsoft.AspNetCore.Identity;
@@ -15,15 +16,15 @@ namespace Base.Infrastructure.IService
 {
     public interface IRoleService
     {
-        //Task<ServiceResponse> UpdateRoleClaims(IEnumerable<UpdateClaimVM> Claims, Guid roleId);
         Task<Role?> AddNewRole(RoleVM model);
         Task<ServiceResponse> UpdateRole(Guid roleId, UpdatedRoleVM updatedRole);
         Task<ServiceResponse> AddRoleClaims(Guid roleId, IEnumerable<ClaimVM> claims);
         Task<ServiceResponse> UpdateRoleClaims(Guid roleId, IEnumerable<UpdatedClaimVM> claims);
         Task<IEnumerable<Role>> GetAllRole();
+        Task<IEnumerable<Role>> GetAllDeletedRole();
         Task<Role?> GetRoleById(Guid id);
-        Task<IEnumerable<Claim>> GetRoleClaimsOfUser(Guid id);
+        IEnumerable<Claim> GetRoleClaimsOfUser(User user);
         Task<ServiceResponse> SoftDeleteRole(Guid id);
-        Task<ServiceResponse> SoftDeleteRoleClaim(int id);
+        Task<ServiceResponse> DeleteRoleClaim(int id);
     }
 }

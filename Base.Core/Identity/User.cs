@@ -1,4 +1,5 @@
-﻿using Base.Core.Identity;
+﻿using Base.Core.Common;
+using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Base.Core.Entity;
 
 //User can be Sales Employee, Sales Admin, Super Admin
-public class User : IdentityUser<Guid>
+public class User : IdentityUser<Guid>, IAuditable
 {
     [Required]
     public string? Name { get; set; }
@@ -31,6 +32,8 @@ public class User : IdentityUser<Guid>
     public bool IsBlocked { get; set; } = false;
 
     public bool IsDeleted { get; set; } = false;
+
+    public string? FilePath { get; set; }
 }
 
 public class AuthenticatedResponse
@@ -46,4 +49,5 @@ public class UserManagerResponse
     public bool IsSuccess { get; set; }
     public IEnumerable<string>? Errors { get; set; }
     public User? LoginUser { get; set; }
+    public string? ConfirmEmailUrl { get; set; }
 }

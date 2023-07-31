@@ -5,20 +5,11 @@ using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
 using Duende.IdentityServer.Extensions;
-using Duende.IdentityServer.Models;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.JsonPatch;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Data;
-using System.Linq;
 using System.Security.Claims;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Base.Infrastructure.Services
 {
@@ -35,111 +26,14 @@ namespace Base.Infrastructure.Services
             _unitOfWork = unitOfWork;
         }
 
-        /*        public async Task<ServiceResponse> UpdateRoleClaims(IEnumerable<UpdateClaimVM> Claims, Guid roleId)
-                {
-                    // Get Role
-                    var role = await _unitOfWork.Roles.Get(r => r.Id == roleId, r => r.RoleClaims!).FirstOrDefaultAsync();
-                    if (role == null)
-                    {
-                        return new ServiceResponse
-                        {
-                            IsSuccess = false,
-                            Message = "Role Not Found"
-                        };
-                    }
-
-                    // Get All Role Claims Of Role, Create a list represent add Role Claims
-                    var roleClaims = role.RoleClaims?.ToList();
-                    var addedRoleClaims = new ConcurrentBag<RoleClaim>();
-
-                    // Use ConcurrentQueue to enable safe enqueueing from multiple threads.
-                    var exceptions = new ConcurrentQueue<Exception>();
-
-                    // For each Claim in UpdatedClaimVM
-                    var options = new ParallelOptions
-                    {
-                        MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.1) * 2))
-                    };
-                    Parallel.ForEach(Claims, options, (claim, state) =>
-                    {
-                        if (claim.Id != null)
-                        {
-                            var roleClaim = roleClaims?.Where(rc => rc.Id == claim.Id).FirstOrDefault();
-                            if (roleClaim == null)
-                            {
-                                exceptions.Enqueue(new ArgumentNullException(null, $"Role Claim with Id '{claim.Id}' Not Found"));
-                                state.Break();
-                                return;
-                            }
-
-                            if (claim.Resource == null)
-                            {
-                                //Soft remove roleClaim
-                                roleClaim.IsDeleted = true;
-                                _unitOfWork.RoleClaims.Update(roleClaim);
-                            }
-                            else
-                            {
-                                // Update Claim Value
-                                roleClaim.ClaimValue = GetAction(claim);
-                                _unitOfWork.RoleClaims.Update(roleClaim);
-                            }
-                        }
-                        else if (claim.Id == null && claim.Resource != null)
-                        {
-                            //Create new roleClaim
-                            RoleClaim r = new RoleClaim
-                            {
-                                RoleId = roleId,
-                                ClaimType = CustomClaimTypes.Permission,
-                                ClaimValue = GetAction(claim)
-                            };
-                            addedRoleClaims.Add(r);
-                        }
-                        else
-                        {
-                            exceptions.Enqueue(new ArgumentNullException(null, "Some Updated Claim are not valid"));
-                            state.Break();
-                            return;
-                        }
-                    });
-
-                    if (!exceptions.IsEmpty)
-                    {
-                        throw new AggregateException(exceptions);
-                    }
-
-                    if (!addedRoleClaims.IsNullOrEmpty())
-                    {
-                        role.RoleClaims = role.RoleClaims!.Concat(addedRoleClaims).ToList();
-                    }
-
-                    if (await _unitOfWork.SaveChangesAsync())
-                    {
-                        return new ServiceResponse
-                        {
-                            IsSuccess = true,
-                            Message = "Update Successfully"
-                        };
-                    }
-                    else
-                    {
-                        return new ServiceResponse
-                        {
-                            IsSuccess = false,
-                            Message = "Update Fail"
-                        };
-                    }
-                }*/
-
         public async Task<Role?> AddNewRole(RoleVM model)
         {
             try
             {
-                var identityRole = await _unitOfWork.Roles.Get(r => !r.IsDeleted && r.Name == model.RoleName).FirstOrDefaultAsync();
+                var identityRole = await _unitOfWork.Roles.Get(r => r.Name == model.RoleName).FirstOrDefaultAsync();
                 if (identityRole != null)
                 {
-                    throw new CustomException("Tên vai trò đã tồn tại")
+                    throw new CustomException("Vai trò đã tồn tại")
                     {
                         Errors = new List<string>() { $"Role name '{model.RoleName}' has already existed" }
                     };
@@ -176,7 +70,13 @@ namespace Base.Infrastructure.Services
                     }
                     return identityRole;
                 }
-                return null;
+                else
+                {
+                    throw new CustomException("Tạo mới vai trò thất bại")
+                    {
+                        Errors = roleResult.Errors.Select(e => e.Description)
+                    };
+                }
             }
             catch (ObjectDisposedException)
             {
@@ -245,6 +145,7 @@ namespace Base.Infrastructure.Services
                 };
             }
 
+            var existedRoleClaims = existedRole.RoleClaims;
             var exceptions = new ConcurrentQueue<Exception>();
             var addedClaims = new ConcurrentBag<RoleClaim>();
             var options = new ParallelOptions
@@ -253,7 +154,7 @@ namespace Base.Infrastructure.Services
             };
             Parallel.ForEach(claims, options, (claim, state) =>
             {
-                var existedRoleClaim = _unitOfWork.RoleClaims.Get(rc => !rc.IsDeleted && rc.ClaimValue.Contains(claim.Resource!));
+                var existedRoleClaim = existedRoleClaims?.Where(rc => rc.ClaimValue.Contains(claim.Resource!));
                 if (!existedRoleClaim.IsNullOrEmpty())
                 {
                     exceptions.Enqueue(new ArgumentException($"Resource '{claim.Resource}' already existed"));
@@ -356,7 +257,7 @@ namespace Base.Infrastructure.Services
                     return;
                 }
 
-                var existedRoleClaim = existedRoleClaims.FirstOrDefault(rc => !rc.IsDeleted && rc.ClaimValue.Contains(claim.Resource!));
+                var existedRoleClaim = existedRoleClaims.FirstOrDefault(rc => rc.ClaimValue.Contains(claim.Resource!));
                 if (existedRoleClaim is not null)
                 {
                     exceptions.Enqueue(new ArgumentException($"Resource '{claim.Resource}' already existed"));
@@ -399,7 +300,12 @@ namespace Base.Infrastructure.Services
 
         public async Task<IEnumerable<Role>> GetAllRole()
         {
-            return await _unitOfWork.Roles.Get(r => !r.IsDeleted, r => r.RoleClaims!).ToListAsync();
+            return await _unitOfWork.Roles.Get(r => !r.IsDeleted, r => r.RoleClaims!).AsNoTracking().ToListAsync();
+        }
+
+        public async Task<IEnumerable<Role>> GetAllDeletedRole()
+        {
+            return await _unitOfWork.Roles.Get(r => r.IsDeleted).AsNoTracking().ToListAsync();
         }
 
         public async Task<Role?> GetRoleById(Guid id)
@@ -407,15 +313,15 @@ namespace Base.Infrastructure.Services
             return await _unitOfWork.Roles.Get(r => !r.IsDeleted && r.Id == id, r => r.RoleClaims!).FirstOrDefaultAsync();
         }
 
-        public async Task<IEnumerable<Claim>> GetRoleClaimsOfUser(Guid id)
+        public IEnumerable<Claim> GetRoleClaimsOfUser(User user)
         {
-            var roles = await GetRolesByUserId(id);
+            var roles = user.Roles;
             if (roles != null)
             {
                 ConcurrentDictionary<string, string> checkClaims = new ConcurrentDictionary<string,string>();
                 foreach(Role role in roles)
                 {
-                    var roleClaims = role.RoleClaims?.Where(rc => !rc.IsDeleted);
+                    var roleClaims = role.RoleClaims;
                     roleClaims!.AsParallel()
                     .WithDegreeOfParallelism(Convert.ToInt32(Math.Ceiling(Environment.ProcessorCount * 0.2 * 2)))
                     .ForAll(roleClaim =>
@@ -476,16 +382,7 @@ namespace Base.Infrastructure.Services
 
             existedRole.IsDeleted = true;
 
-            var log = new Log
-            {
-                Type = (int)AuditType.Delete,
-                TableName = nameof(Role),
-                PrimaryKey = id.ToString()
-            };
-
-            await _unitOfWork.AuditLogs.AddAsync(log);
-
-            if (await _unitOfWork.SaveChangesAsync())
+            if (await _unitOfWork.SaveDeletedChangesAsync())
             {
                 return new ServiceResponse
                 {
@@ -504,9 +401,9 @@ namespace Base.Infrastructure.Services
             }
         }
 
-        public async Task<ServiceResponse> SoftDeleteRoleClaim(int id)
+        public async Task<ServiceResponse> DeleteRoleClaim(int id)
         {
-            var existedRoleClaim = await _unitOfWork.RoleClaims.Get(rc => rc.Id == id && !rc.IsDeleted).FirstOrDefaultAsync();
+            var existedRoleClaim = await _unitOfWork.RoleClaims.Get(rc => rc.Id == id).FirstOrDefaultAsync();
             if (existedRoleClaim == null)
             {
                 return new ServiceResponse
@@ -517,18 +414,9 @@ namespace Base.Infrastructure.Services
                 };
             }
 
-            existedRoleClaim.IsDeleted = true;
+            _unitOfWork.RoleClaims.Remove(existedRoleClaim);
 
-            var log = new Log
-            {
-                Type = (int)AuditType.Delete,
-                TableName = nameof(RoleClaim),
-                PrimaryKey = id.ToString()
-            };
-
-            await _unitOfWork.AuditLogs.AddAsync(log);
-
-            if (await _unitOfWork.SaveChangesAsync())
+            if (await _unitOfWork.SaveDeletedChangesAsync())
             {
                 return new ServiceResponse
                 {
@@ -579,7 +467,15 @@ namespace Base.Infrastructure.Services
             }
             if (model.Delete)
             {
-                actions += "delete";
+                actions += "delete ";
+            }
+            if (model.ReadAll)
+            {
+                actions += "all ";
+            }
+            if (model.Restore)
+            {
+                actions += "restore";
             }
             return string.Concat(model.Resource, ":", actions).Trim();
         }
@@ -601,7 +497,15 @@ namespace Base.Infrastructure.Services
             }
             if (model.Delete)
             {
-                actions += "delete";
+                actions += "delete ";
+            }
+            if (model.ReadAll)
+            {
+                actions += "all ";
+            }
+            if (model.Restore)
+            {
+                actions += "restore";
             }
             return string.Concat(model.Resource, ":", actions).Trim();
         }

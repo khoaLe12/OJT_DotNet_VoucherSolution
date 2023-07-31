@@ -25,11 +25,20 @@ public class VoucherTypesController : ControllerBase
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet]
+    [HttpGet("all")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherTypeVM>))]
     public IActionResult GetAllVoucherTypes()
     {
         var result = _voucherTypeService.GetAllVoucherTypes();
+        return Ok(_mapper.Map<IEnumerable<ResponseVoucherTypeVM>>(result));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-delete")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherTypeVM>))]
+    public IActionResult GetAllDeletedVoucherTypes()
+    {
+        var result = _voucherTypeService.GetAllDeletedVoucherTypes();
         return Ok(_mapper.Map<IEnumerable<ResponseVoucherTypeVM>>(result));
     }
 
@@ -141,7 +150,7 @@ public class VoucherTypesController : ControllerBase
         {
             if (ModelState.IsValid)
             {
-                var result = await _voucherTypeService.UpdateVoucherType(_mapper.Map<VoucherType>(resource), voucherTypeId);
+                var result = await _voucherTypeService.UpdateVoucherType(resource, voucherTypeId);
                 if (result.IsSuccess)
                 {
                     return Ok(result);

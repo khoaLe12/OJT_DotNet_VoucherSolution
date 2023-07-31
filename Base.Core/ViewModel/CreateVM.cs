@@ -1,35 +1,11 @@
-﻿using Base.Core.Entity;
-using System;
-using System.Collections;
-using System.Collections.Generic;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Base.Core.ViewModel;
 
-
-public class UpdateInformationVM
-{
-    public string? Name { get; set; }
-    public string? CitizenId { get; set; }
-    [EmailAddress]
-    public string? Email { get; set; }
-    public string? PhoneNumber { get; set; }
-}
-
-public class ResetPasswordVM
-{
-    [Required]
-    public string? OldPassword { get; set; }
-
-    [Required]
-    public string? NewPassword { get; set; }
-
-    [Required]
-    public string? ConfirmPassword { get; set; }
-}
+//========================================================
 
 public class LoginUserVM
 {
@@ -51,17 +27,55 @@ public class LoginCustomerVM
     public string Password { get; set; } = "";
 }
 
+//========================================================
+public class UpdateInformationVM
+{
+    public string? Name { get; set; }
+    public string? CitizenId { get; set; }
+    [EmailAddress]
+    public string? Email { get; set; }
+    public string? PhoneNumber { get; set; }
+    public IFormFile? Avatar { get; set; }
+}
+
+public class ResetPasswordVM
+{
+    [Required]
+    public string? OldPassword { get; set; }
+
+    [Required]
+    public string? NewPassword { get; set; }
+
+    [Required]
+    public string? ConfirmPassword { get; set; }
+}
+
+public class ForgetPasswordVM
+{
+    [Required]
+    public string? Token { get; set; }
+    [Required]
+    [EmailAddress]
+    public string? Email { get; set; }
+    [Required]
+    [MinLength(5)]
+    public string? NewPassword { get; set; }
+    [Required]
+    [MinLength(5)]
+    public string? ConfirmPassword { get; set; }
+}
+
+//========================================================
+
 public class CustomerVM
 {
     [Required]
     public string? Name { get; set; }
     public string? CitizenId { get; set; }
     [EmailAddress]
+    [AllowNull]
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
-    public bool? EmailConfirmed { get; set; }
-    public bool? PhoneNumberConfirmed { get; set; }
-    public bool? TwoFactorEnabled { get; set; }
     public bool? IsBlocked { get; set; }
 
     [Required]
@@ -72,6 +86,8 @@ public class CustomerVM
     public string ConfirmPassword { get; set; } = "";
 
     public IEnumerable<Guid>? SalesEmployeeIds { get; set; }
+
+    public IFormFile? Avatar { get; set; }
 }
 
 public class UserVM
@@ -81,11 +97,9 @@ public class UserVM
     public string? UserName { get; set; }
     public string? CitizenId { get; set; }
     [EmailAddress]
+    [AllowNull]
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
-    public bool? EmailConfirmed { get; set; }
-    public bool? PhoneNumberConfirmed { get; set; }
-    public bool? TwoFactorEnabled { get; set; }
     public bool? IsBlocked { get; set; }
 
     [Required]
@@ -99,6 +113,21 @@ public class UserVM
 
     [Required]
     public List<Guid> RoleIds { get; set; } = new();
+    public IFormFile? Avatar { get; set; }
+}
+
+//========================================================
+
+public class UpdatedRolesOfUserVM
+{
+    public Guid RoleId { get; set; }
+    public bool IsDeleted { get; set; }
+}
+
+public class AssignSupporterVM
+{
+    public Guid UserId { get; set; }
+    public bool IsDeleted { get; set; }
 }
 
 //=========================================================
@@ -126,6 +155,8 @@ public class ClaimVM
     public bool Write { get; set; } = false;
     public bool Update { get; set; } = false;
     public bool Delete { get; set; } = false;
+    public bool ReadAll { get; set; } = false;
+    public bool Restore { get; set; } = false;
 }
 
 public class UpdatedClaimVM
@@ -138,6 +169,8 @@ public class UpdatedClaimVM
     public bool Write { get; set; } = false;
     public bool Update { get; set; } = false;
     public bool Delete { get; set; } = false;
+    public bool ReadAll { get; set; } = false;
+    public bool Restore { get; set; } = false;
 }
 
 //===========================================================
@@ -197,8 +230,14 @@ public class UpdatedServicePackageVM
 
 public class UpdatedServicesInPackageVM
 {
-    public int Id { get; set; }
-    public bool IsDelete { get; set; }
+    public int ServiceId { get; set; }
+    public bool IsDeleted { get; set; }
+}
+
+public class UpdatedVoucherTypesInPackageVM
+{
+    public int VoucherTypeId { get; set; }
+    public bool IsDeleted { get; set; }
 }
 
 //============================================================
@@ -266,4 +305,16 @@ public class UpdatedExpiredDateExtensionVM
     public Decimal Price { get; set; }
     [Required]
     public DateTime NewExpiredDate { get; set; }
+}
+
+//=====================================================
+
+public class MailMessageVM
+{
+    [Required]
+    public string To { get; set; } = "";
+    public string Subject { get; set; } = "Default Subject";
+    public string Content { get; set; } = "No Content";
+    public IFormFileCollection? Files { get; set; }
+    //IEnumerable<IFormFile>
 }

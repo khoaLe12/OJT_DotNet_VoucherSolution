@@ -1,5 +1,6 @@
 ﻿using Base.Core.Common;
 using Base.Core.Entity;
+using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,11 @@ internal class ServiceService : IServiceService
         return _unitOfWork.Services.FindAll().Where(s => !s.IsDeleted);
     }
 
+    public IEnumerable<Service> GetAllDeletedService()
+    {
+        return _unitOfWork.Services.FindAll().Where(s => s.IsDeleted);
+    }
+
     public async Task<Service?> GetServiceById(int id)
     {
         Expression<Func<Service, bool>> where = s => !s.IsDeleted && s.Id == id;
@@ -30,9 +36,9 @@ internal class ServiceService : IServiceService
         return await _unitOfWork.Services.Get(where, includes).FirstOrDefaultAsync();
     }
 
-    public async Task<ServiceResponse> UpdateInformation(Service updatedService, int serviceId)
+    public async Task<ServiceResponse> UpdateInformation(ServiceVM updatedService, int serviceId)
     {
-        var existedService = await _unitOfWork.Services.Get(s => s.Id == serviceId).AsNoTracking().FirstOrDefaultAsync();
+        var existedService = await _unitOfWork.Services.Get(s => s.Id == serviceId).FirstOrDefaultAsync();
         var checkService = await _unitOfWork.Services.Get(s => s.ServiceName == updatedService.ServiceName).AsNoTracking().FirstOrDefaultAsync();
 
         if (existedService == null)
@@ -55,10 +61,8 @@ internal class ServiceService : IServiceService
             };
         }
 
-        updatedService.IsDeleted = existedService.IsDeleted;
-        updatedService.Id = serviceId;
-
-        _unitOfWork.Services.Update(updatedService);
+        existedService.ServiceName = updatedService.ServiceName!;
+        existedService.Description = updatedService.Description;
 
         if (await _unitOfWork.SaveChangesAsync())
         {
@@ -81,7 +85,7 @@ internal class ServiceService : IServiceService
 
     public async Task<Service?> AddNewService(Service service)
     {
-        var existedService = await _unitOfWork.Services.Get(s => !s.IsDeleted && s.ServiceName == service.ServiceName).FirstOrDefaultAsync();
+        var existedService = await _unitOfWork.Services.Get(s => s.ServiceName == service.ServiceName).FirstOrDefaultAsync();
         if(existedService != null)
         {
             throw new ArgumentException($"Dịch vụ '{existedService.ServiceName}' đã tồn tại");
@@ -110,16 +114,7 @@ internal class ServiceService : IServiceService
 
         existedService.IsDeleted = true;
 
-        var log = new Log
-        {
-            Type = (int)AuditType.Delete,
-            TableName = nameof(Service),
-            PrimaryKey = id.ToString()
-        };
-
-        await _unitOfWork.AuditLogs.AddAsync(log);
-
-        if (await _unitOfWork.SaveChangesAsync())
+        if (await _unitOfWork.SaveDeletedChangesAsync())
         {
             return new ServiceResponse
             {

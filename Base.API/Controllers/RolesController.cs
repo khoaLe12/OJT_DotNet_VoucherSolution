@@ -23,11 +23,20 @@ public class RolesController : ControllerBase
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet]
+    [HttpGet("All")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseRoleVM>))]
     public async Task<IActionResult> GetAllRoles()
     {
         var roles = await _roleService.GetAllRole();
+        return Ok(_mapper.Map<IEnumerable<ResponseRoleVM>>(roles));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-delete")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseRoleVM>))]
+    public async Task<IActionResult> GetAllDeletedRoles()
+    {
+        var roles = await _roleService.GetAllDeletedRole();
         return Ok(_mapper.Map<IEnumerable<ResponseRoleVM>>(roles));
     }
 
@@ -308,7 +317,7 @@ public class RolesController : ControllerBase
         {
             if (ModelState.IsValid)
             {
-                var result = await _roleService.SoftDeleteRoleClaim(id);
+                var result = await _roleService.DeleteRoleClaim(id);
                 if (result.IsSuccess)
                 {
                     return Ok(result);

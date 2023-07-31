@@ -25,11 +25,20 @@ public class VoucherController : ControllerBase
     }
 
     [Authorize(Policy = "All")]
-    [HttpGet]
+    [HttpGet("all")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
     public IActionResult GetAllVoucher()
     {
         var result = _voucherService.GetAllVoucher();
+        return Ok(_mapper.Map<IEnumerable<ResponseVoucherVM>>(result));
+    }
+
+    [Authorize(Policy = "All")]
+    [HttpGet("all-delete")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
+    public IActionResult GetAllDeletedVoucher()
+    {
+        var result = _voucherService.GetAllDeletedVoucher();
         return Ok(_mapper.Map<IEnumerable<ResponseVoucherVM>>(result));
     }
 
@@ -118,6 +127,40 @@ public class VoucherController : ControllerBase
             {
                 IsSuccess = false,
                 Message = ex.Message,
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Read")]
+    [HttpGet("Customer/{customerId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetAllVoucherOfCustomerByid(Guid customerId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherService.GetAllVoucherOfCustomerById(customerId);
+                return Ok(_mapper.Map<IEnumerable<ResponseVoucherVM>>(result));
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (ArgumentNullException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng",
                 Error = new List<string>() { ex.Message }
             });
         }
