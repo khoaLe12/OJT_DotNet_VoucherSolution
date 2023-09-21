@@ -12,25 +12,21 @@ namespace Base.API.Services
 {
     public interface IJWTTokenService
     {
-        string CreateToken(User user);
+        string CreateToken(User user, IEnumerable<Claim> roleClaims);
         string CreateToken(Customer customer);
     }
 
     public class JWTTokenService : IJWTTokenService
     {
         private readonly IConfiguration _configuration;
-        private readonly IRoleService _roleService;
 
-        public JWTTokenService(IConfiguration configuration, IRoleService roleService)
+        public JWTTokenService(IConfiguration configuration)
         {
             _configuration = configuration;
-            _roleService = roleService;
         }
 
-        public string CreateToken(User user)
+        public string CreateToken(User user, IEnumerable<Claim> roleClaims)
         {
-            var roleClaims = _roleService.GetRoleClaimsOfUser(user);
-
             var claims = new List<System.Security.Claims.Claim>
             {
                 new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),

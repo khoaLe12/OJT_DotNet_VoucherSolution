@@ -9,6 +9,7 @@ using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Duende.IdentityServer.Extensions;
 using EntityFramework.Exceptions.Common;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -30,13 +31,15 @@ internal class CustomerService : ICustomerService
     private readonly ICurrentUserService _currentUserService;
     private readonly IConfiguration _configuration;
     private readonly Cloudinary _cloudinary;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public CustomerService(UserManager<Customer> customerManager, 
         IUserStore<Customer> userStore,
         IUnitOfWork unitOfWork,
         ICurrentUserService currentUserService,
         IConfiguration configuration,
-        Cloudinary cloudinary
+        Cloudinary cloudinary,
+        IHttpContextAccessor httpContextAccessor
         //ILogger<CustomerService> logger,
         )
     {
@@ -48,7 +51,43 @@ internal class CustomerService : ICustomerService
         _currentUserService = currentUserService;
         _configuration = configuration;
         _cloudinary = cloudinary;
+        _httpContextAccessor = httpContextAccessor;
 	}
+
+    public async Task<CustomerManagerResponse> ActivateEmailConfirmation(Guid customerId)
+    {
+        var existedCustomer = await _unitOfWork.Customers.Get(c => !c.IsDeleted && c.Id == customerId).FirstOrDefaultAsync();
+        if (existedCustomer == null)
+        {
+            return new CustomerManagerResponse
+            {
+                Message = "Không tìm thấy tài khoản",
+                IsSuccess = false
+            };
+        }
+
+        if (existedCustomer.Email.IsNullOrEmpty())
+        {
+            return new CustomerManagerResponse
+            {
+                Message = "Chưa cung cấp email",
+                IsSuccess = false
+            };
+        }
+
+        var confirmEmailtoken = await _customerManager.GenerateUserTokenAsync(existedCustomer, "CustomerTokenProvider", UserManager<Customer>.ConfirmEmailTokenPurpose);
+        var encodedEmailToken = Encoding.UTF8.GetBytes(confirmEmailtoken);
+        var validEmailToken = WebEncoders.Base64UrlEncode(encodedEmailToken);
+        string url = $"{_httpContextAccessor.HttpContext.GetIdentityServerBaseUrl()}/api/auth/confirmemail/customer?customerid={existedCustomer.Id}&token={validEmailToken}";
+
+        return new CustomerManagerResponse
+        {
+            IsSuccess = true,
+            Message = "Đã gửi mail xác thực, vui lòng kiểm tra",
+            ConfirmEmailUrl = url,
+            LoginCustomer = existedCustomer
+        };
+    }
 
     public async Task<CustomerManagerResponse> ConfirmEmailAsync(Guid customerId, string token)
     {
@@ -199,7 +238,7 @@ internal class CustomerService : ICustomerService
                 var encodedEmailToken = Encoding.UTF8.GetBytes(confirmEmailtoken);
                 var validEmailToken = WebEncoders.Base64UrlEncode(encodedEmailToken);
 
-                url = $"{_configuration["AppUrl"]}api/auth/confirmemail/customer?customerid={existedCustomer.Id}&token={validEmailToken}";
+                url = $"{_httpContextAccessor.HttpContext.GetIdentityServerBaseUrl()}/api/auth/confirmemail/customer?customerid={existedCustomer.Id}&token={validEmailToken}";
             }
 
             // Check if avatar is updated
@@ -267,6 +306,122 @@ internal class CustomerService : ICustomerService
             };
         }
         catch(UniqueConstraintException ex)
+        {
+            List<string>? errorList = new List<string>() { ex.Message };
+            if (ex.InnerException!.Message.Contains("IX_Customers_CitizenId"))
+            {
+                errorList.Add("Mã công dân đã tồn tại");
+            }
+            if (ex.InnerException!.Message.Contains("IX_Customers_Email"))
+            {
+                errorList.Add("Email đã tổn tại");
+            }
+            if (ex.InnerException!.Message.Contains("IX_Customers_PhoneNumber"))
+            {
+                errorList.Add("Số điện thoại đã tồn tại");
+            }
+
+            return new CustomerManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Errors = errorList
+            };
+        }
+    }
+
+    public async Task<CustomerManagerResponse> UpdateInformationById(Guid id, UpdateInformationVM model)
+    {
+        try
+        {
+            var existedCustomer = await _unitOfWork.Customers.Get(c => !c.IsDeleted && c.Id == id).FirstOrDefaultAsync();
+            if (existedCustomer == null)
+            {
+                return new CustomerManagerResponse
+                {
+                    Message = "Không tìm thấy tài khoản",
+                    IsSuccess = false
+                };
+            }
+
+            // If Email is updated then make a verification for it
+            string? url = null;
+            if (model.Email is not null && (!model.Email.Equals(existedCustomer.Email)))
+            {
+                if ((await _customerManager.FindByEmailAsync(model.Email)) is not null)
+                {
+                    return new CustomerManagerResponse
+                    {
+                        IsSuccess = false,
+                        Message = $"Email '{model.Email}' đã tồn tại",
+                        Errors = new List<string>() { $"Email '{model.Email}' has already existed" }
+                    };
+                }
+
+                var confirmEmailtoken = await _customerManager.GenerateUserTokenAsync(existedCustomer, "CustomerTokenProvider", UserManager<Customer>.ConfirmEmailTokenPurpose);
+
+                var encodedEmailToken = Encoding.UTF8.GetBytes(confirmEmailtoken);
+                var validEmailToken = WebEncoders.Base64UrlEncode(encodedEmailToken);
+
+                url = $"{_httpContextAccessor.HttpContext.GetIdentityServerBaseUrl()}/api/auth/confirmemail/customer?customerid={existedCustomer.Id}&token={validEmailToken}";
+            }
+
+            // Check if avatar is updated
+            var file = model.Avatar;
+            if (file is not null && file.Length > 0)
+            {
+                var uploadParams = new ImageUploadParams
+                {
+                    File = new FileDescription(file.FileName, file.OpenReadStream())
+                };
+                var uploadResult = await _cloudinary.UploadAsync(uploadParams);
+
+                // Check if there is error while uploading file
+                if (uploadResult.Error != null)
+                {
+                    return new CustomerManagerResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Tải file ảnh thất bại",
+                        Errors = new List<string> { uploadResult.Error.Message }
+                    };
+                }
+
+                existedCustomer.FilePath = uploadResult.SecureUrl.ToString();
+            }
+
+            existedCustomer.Name = model.Name;
+            existedCustomer.PhoneNumber = model.PhoneNumber;
+            existedCustomer.Email = model.Email;
+            existedCustomer.NormalizedEmail = model.Email?.ToUpper();
+            existedCustomer.CitizenId = model.CitizenId;
+
+            if (url is not null)
+            {
+                existedCustomer.EmailConfirmed = false;
+            }
+
+            //Should catch possible exception when save
+            if (await _unitOfWork.SaveChangesAsync())
+            {
+                return new CustomerManagerResponse
+                {
+                    IsSuccess = true,
+                    Message = "Cập nhật thành công",
+                    LoginCustomer = existedCustomer,
+                    ConfirmEmailUrl = url
+                };
+            }
+            else
+            {
+                return new CustomerManagerResponse
+                {
+                    IsSuccess = false,
+                    Message = "Cập nhật thất bại"
+                };
+            }
+        }
+        catch (UniqueConstraintException ex)
         {
             List<string>? errorList = new List<string>() { ex.Message };
             if (ex.InnerException!.Message.Contains("IX_Customers_CitizenId"))
@@ -503,7 +658,7 @@ internal class CustomerService : ICustomerService
     {
         var loginInformation = model.AccountInformation;
         var customer = await _unitOfWork.Customers
-            .Get(c => c.Email == loginInformation || c.PhoneNumber == loginInformation || c.CitizenId == loginInformation)
+            .Get(c => !c.IsDeleted && (c.Email == loginInformation || c.PhoneNumber == loginInformation || c.CitizenId == loginInformation))
             .FirstOrDefaultAsync();
 
         if (customer == null)
@@ -586,6 +741,45 @@ internal class CustomerService : ICustomerService
                         IsSuccess = false,
                         Message = $"Email '{model.Email}' đã tồn tại",
                         Errors = new List<string>() { $"Email '{model.Email}' has already existed" }
+                    };
+                }
+            }
+
+            if (model.CitizenId is not null)
+            {
+                if ((await _unitOfWork.Customers.Get(c => c.CitizenId == model.CitizenId).FirstOrDefaultAsync()) is not null)
+                {
+                    return new CustomerManagerResponse
+                    {
+                        IsSuccess = false,
+                        Message = $"CCCD '{model.CitizenId}' đã tồn tại",
+                        Errors = new List<string>() { $"CitizenId '{model.CitizenId}' has already existed" }
+                    };
+                }
+            }
+
+            if (model.PhoneNumber is not null)
+            {
+                if ((await _unitOfWork.Customers.Get(c => c.PhoneNumber == model.PhoneNumber).FirstOrDefaultAsync()) is not null)
+                {
+                    return new CustomerManagerResponse
+                    {
+                        IsSuccess = false,
+                        Message = $"Số điện thoại '{model.PhoneNumber}' đã tồn tại",
+                        Errors = new List<string>() { $"Phone '{model.PhoneNumber}' has already existed" }
+                    };
+                }
+            }
+
+            if (model.CitizenId is not null)
+            {
+                if ((await _unitOfWork.Customers.Get(c => c.CitizenId == model.CitizenId).FirstOrDefaultAsync()) is not null)
+                {
+                    return new CustomerManagerResponse
+                    {
+                        IsSuccess = false,
+                        Message = $"CCCD '{model.CitizenId}' đã tồn tại",
+                        Errors = new List<string>() { $"CitizenId '{model.CitizenId}' has already existed" }
                     };
                 }
             }
@@ -742,9 +936,11 @@ internal class CustomerService : ICustomerService
             .Get(c => c.Id == id && !c.IsDeleted, new Expression<Func<Customer, object>>[]
             {
                 c => c.Vouchers!,
-                c => c.Bookings!
+                c => c.Bookings!,
+                c => c.SalesEmployees!
             })
             .Include(nameof(Customer.Bookings) + "." + nameof(Booking.SalesEmployee))
+            .Include(nameof(Customer.Vouchers) + "." + nameof(Voucher.VoucherType))
             .FirstOrDefaultAsync();
     }
 
@@ -778,6 +974,45 @@ internal class CustomerService : ICustomerService
                 IsSuccess = false,
                 Message = "Xóa thất bại",
                 Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> RestoreCustomer(Guid customerId)
+    {
+        var deletedCustomer = await _unitOfWork.Customers.Get(c => c.Id == customerId && c.IsDeleted).FirstOrDefaultAsync();
+        if (deletedCustomer is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy khách hàng đã xóa",
+                Error = new List<string>() { "Can not find deleted customer with the given id: " + customerId }
+            };
+        }
+        deletedCustomer.IsDeleted = false;
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == customerId.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(Customer)).FirstOrDefaultAsync();
+        if (log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        if (await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
             };
         }
     }

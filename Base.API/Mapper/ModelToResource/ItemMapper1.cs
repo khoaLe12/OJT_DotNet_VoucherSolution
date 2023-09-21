@@ -18,8 +18,7 @@ namespace Base.API.Mapper.ModelToResource
 
             CreateMap<UpdatedServicePackageVM, ServicePackage>();
 
-            CreateMap<VoucherTypeVM, VoucherType>()
-                .ForMember(dest => dest.IsAvailable, opt => opt.MapFrom(src => src.IsActiveNow));
+            CreateMap<VoucherTypeVM, VoucherType>();
 
             CreateMap<UpdatedVoucherTypeVM, VoucherType>();
 

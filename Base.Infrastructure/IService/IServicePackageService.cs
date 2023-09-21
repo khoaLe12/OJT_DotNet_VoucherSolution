@@ -13,13 +13,14 @@ namespace Base.Infrastructure.IService;
 
 public interface IServicePackageService
 {
-    Task<ServiceResponse> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<UpdatedVoucherTypesInPackageVM> model);
+    Task<ServiceResponse> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<int> model);
     Task<ServicePackage?> AddNewServicePackage(ServicePackage servicePackage, IEnumerable<int> servicesIds);
     IEnumerable<ServicePackage> GetALlServicePackage();
     IEnumerable<ServicePackage> GetAllDeletedServicePackage();
     ServicePackage? GetServicePackageById(int id);
     Task<ServiceResponse> UpdateInformation(int servicePackageId, UpdatedServicePackageVM updatedServicePackage);
-    Task<ServiceResponse> UpdateServiceOfServicePackage(IEnumerable<UpdatedServicesInPackageVM> updatedServicesInPackage, int servicePackageId);
+    Task<ServiceResponse> UpdateServiceOfServicePackage(IEnumerable<int> serviceIds, int servicePackageId);
     Task<ServiceResponse> SoftDelete(int id);
     Task<ServiceResponse> SoftDeleteBatch(IEnumerable<int> ids);
+    Task<ServiceResponse> RestoreServicePackage(int id);
 }

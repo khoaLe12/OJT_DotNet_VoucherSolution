@@ -166,6 +166,16 @@ internal class ExpiredDateExtensionService : IExpiredDateExtensionService
         return await _unitOfWork.ExpiredDateExtensions.Get(e => !e.IsDeleted && e.SalesEmployeeId == userId, e => e.Voucher!).AsNoTracking().ToArrayAsync();
     }
 
+    public async Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfUserById(Guid userId)
+    {
+        var user = await _unitOfWork.Users.FindAsync(userId);
+        if (user == null)
+        {
+            throw new ArgumentNullException(null, $"User Not Found with the given id: {userId}");
+        }
+        return await _unitOfWork.ExpiredDateExtensions.Get(e => !e.IsDeleted && e.SalesEmployeeId == userId, e => e.Voucher!).AsNoTracking().ToArrayAsync();
+    }
+
     public async Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfCustomer()
     {
         var userId = _currentUserService.UserId;
@@ -175,6 +185,27 @@ internal class ExpiredDateExtensionService : IExpiredDateExtensionService
             throw new ArgumentNullException(null, $"Customer Not Found with the given id: {userId}");
         }
         if(user.Vouchers == null)
+        {
+            return Enumerable.Empty<ExpiredDateExtension>();
+        }
+
+        Expression<Func<ExpiredDateExtension, object>>[] includes =
+        {
+            e => e.Voucher!,
+            e => e.SalesEmployee!
+        };
+
+        return await _unitOfWork.ExpiredDateExtensions.Get(e => !e.IsDeleted && user.Vouchers.Contains(e.Voucher), includes).AsNoTracking().ToArrayAsync();
+    }
+
+    public async Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfCustomerById(Guid customerId)
+    {
+        var user = await _unitOfWork.Customers.Get(u => u.Id == customerId, u => u.Vouchers!).AsNoTracking().FirstOrDefaultAsync();
+        if (user == null)
+        {
+            throw new ArgumentNullException(null, $"Customer Not Found with the given id: {customerId}");
+        }
+        if (user.Vouchers == null)
         {
             return Enumerable.Empty<ExpiredDateExtension>();
         }
@@ -235,6 +266,54 @@ internal class ExpiredDateExtensionService : IExpiredDateExtensionService
                 IsSuccess = false,
                 Message = "Xóa thất bại",
                 Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> RestoreVoucherExtension(int id)
+    {
+        var deletedVoucherExtension = await _unitOfWork.ExpiredDateExtensions.Get(e => e.Id == id && e.IsDeleted).FirstOrDefaultAsync();
+        if (deletedVoucherExtension is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy gia hạn voucher đã xóa",
+                Error = new List<string>() { "Can not find deleted voucher extension with the given id: " + id }
+            };
+        }
+
+        var existedVoucher = await _unitOfWork.Vouchers.FindAsync(deletedVoucherExtension.VoucherId);
+        if (existedVoucher is not null)
+        {
+            if(existedVoucher.ExpiredDate == deletedVoucherExtension.OldExpiredDate)
+            {
+                existedVoucher.ExpiredDate = deletedVoucherExtension.NewExpiredDate;
+            }
+        }
+        deletedVoucherExtension.IsDeleted = false;
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == id.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(ExpiredDateExtension)).FirstOrDefaultAsync();
+        if (log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        if (await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
             };
         }
     }

@@ -8,6 +8,7 @@ namespace Base.Infrastructure.IService;
 
 public interface ICustomerService
 {
+    Task<CustomerManagerResponse> ActivateEmailConfirmation(Guid customerId);
     Task<CustomerManagerResponse> ConfirmEmailAsync(Guid customerId, string token);
     Task<CustomerManagerResponse> LoginCustomerAsync(LoginCustomerVM model);
     Task<CustomerManagerResponse> RegisterNewCustomerAsync(CustomerVM model);
@@ -20,6 +21,8 @@ public interface ICustomerService
     Task<CustomerManagerResponse> ForgetAndResetPasswordAsync(ForgetPasswordVM model);
     Task<CustomerManagerResponse> PatchUpdate(Guid userId, JsonPatchDocument<Customer> patchDoc, ModelStateDictionary ModelState);
     Task<CustomerManagerResponse> UpdateInformation(UpdateInformationVM model);
+    Task<CustomerManagerResponse> UpdateInformationById(Guid id, UpdateInformationVM model);
     Task<CustomerManagerResponse> AssignSupporter(Guid customerId, IEnumerable<AssignSupporterVM> model);
     Task<ServiceResponse> SoftDelete(Guid id);
+    Task<ServiceResponse> RestoreCustomer(Guid customerId);
 }

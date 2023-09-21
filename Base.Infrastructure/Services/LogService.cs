@@ -40,14 +40,14 @@ internal class LogService : ILogService
 
     public async Task<ServiceResponse> Recover(int id)
     {
-        var existedLog = await _unitOfWork.AuditLogs.Get(l => l.Id == id && l.Type == (int)AuditType.Delete).FirstOrDefaultAsync();
+        var existedLog = await _unitOfWork.AuditLogs.Get(l => l.Id == id && l.Type == (int)AuditType.Delete && l.IsRestored != true).FirstOrDefaultAsync();
         if(existedLog is null)
         {
             return new ServiceResponse
             {
                 IsSuccess = false,
-                Message = "Không tìm thấy Log",
-                Error = new List<string>() { "Can not find Log with the given Id: " + id, $"Or Log '{id}' is not a deleted record" }
+                Message = "Không thể khôi phục",
+                Error = new List<string>() { "Or can not find Log with the given Id: " + id, $"Or Log '{id}' is not a deletion record", $"Or Log '{id}' is already restored" }
             };
         }
         
@@ -226,6 +226,16 @@ internal class LogService : ILogService
                         Error = new List<string>() { "Can not find voucher extension with the given id: " + existedLog.PrimaryKey, "Voucher extension does not exist in the system" }
                     };
                 }
+
+                var voucher = await _unitOfWork.Vouchers.FindAsync(existedVoucherExtension.VoucherId);
+                if(voucher is not null)
+                {
+                    if(voucher.ExpiredDate == existedVoucherExtension.OldExpiredDate)
+                    {
+                        voucher.ExpiredDate = existedVoucherExtension.NewExpiredDate;
+                    }
+                }
+
                 existedVoucherExtension.IsDeleted = false;
                 break;
             default:
@@ -236,6 +246,8 @@ internal class LogService : ILogService
                     Error = new List<string>() { "Can not find entity named: " + existedLog.TableName }
                 };
         }
+
+        existedLog.IsRestored = true;
 
         if(await _unitOfWork.SaveChangesNoLogAsync())
         {

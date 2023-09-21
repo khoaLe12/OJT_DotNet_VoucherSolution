@@ -123,6 +123,7 @@ public static class DependencyInjection
         services.AddScoped<IExpiredDateExtensionRepository, ExpiredDateExtensionRepository>();
 
 
+        services.AddScoped<IStatisticalService, StatisticalService>();
         services.AddScoped<ILogService, LogService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IUserService, UserService>();

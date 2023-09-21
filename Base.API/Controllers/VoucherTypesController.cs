@@ -273,4 +273,97 @@ public class VoucherTypesController : ControllerBase
             });
         }
     }
+
+    [Authorize(Policy = "Delete")]
+    [HttpDelete("batch")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> SoftDeleteBatchVoucherType([FromBody] IEnumerable<int> ids)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherTypeService.SoftDeleteBatch(ids);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Restore")]
+    [HttpPatch("restore-vouchertype/{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> RestoreVoucherType(int id)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherTypeService.RestoreVoucherType(id);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
 }

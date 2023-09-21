@@ -19,4 +19,5 @@ public interface IServiceService
     Task<Service?> GetServiceById(int id);
     Task<ServiceResponse> UpdateInformation(ServiceVM updatedService, int serviceId);
     Task<ServiceResponse> SoftDelete(int id);
+    Task<ServiceResponse> RestoreService(int id);
 }

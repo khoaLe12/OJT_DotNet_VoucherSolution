@@ -9,6 +9,7 @@ using Duende.IdentityServer.Extensions;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace Base.Infrastructure.Services;
 
@@ -310,7 +311,13 @@ internal class BookingService : IBookingService
 
     public IEnumerable<Booking> GetAllBookings()
     {
-        return _unitOfWork.Bookings.FindAll().Where(b => !b.IsDeleted);
+        return _unitOfWork.Bookings
+            .Get(b => !b.IsDeleted, 
+            new Expression<Func<Booking, object>>[] 
+            { 
+                b => b.Customer!,
+                b => b.SalesEmployee!
+            });
     }
 
     public IEnumerable<Booking> GetAllDeletedBookings()
@@ -331,6 +338,24 @@ internal class BookingService : IBookingService
             .FirstOrDefaultAsync();
     }
 
+    public async Task<IEnumerable<Booking>> GetAllBookingOfUserById(Guid userId)
+    {
+        var user = await _unitOfWork.Users.FindAsync(userId);
+        if (user is null)
+        {
+            throw new ArgumentNullException(null, $"user Not Found with the given id: {userId}");
+        }
+        return await _unitOfWork.Bookings
+            .Get(b => !b.IsDeleted && b.SalesEmployeeId == userId,
+            new Expression<Func<Booking, object>>[]
+            {
+                b => b.Customer!,
+                b => b.SalesEmployee!
+            })
+            .AsNoTracking()
+            .ToArrayAsync();
+    }
+
     public async Task<IEnumerable<Booking>> GetAllBookingOfUser()
     {
         var userId = _currentUserService.UserId;
@@ -339,7 +364,14 @@ internal class BookingService : IBookingService
         {
             throw new ArgumentNullException(null, $"User Not Found with the given id: {userId}");
         }
-        return await _unitOfWork.Bookings.Get(b => b.SalesEmployeeId == userId && !b.IsDeleted).AsNoTracking().ToListAsync();
+        return await _unitOfWork.Bookings
+            .Get(b => b.SalesEmployeeId == userId && !b.IsDeleted, 
+            new Expression<Func<Booking, object>>[]
+            {
+                b => b.Customer!
+            })
+            .AsNoTracking()
+            .ToArrayAsync();
     }
 
     public async Task<IEnumerable<Booking>> GetAllBookingOfCustomerById(Guid customerId)
@@ -349,7 +381,15 @@ internal class BookingService : IBookingService
         {
             throw new ArgumentNullException(null, $"Customer Not Found with the given id: {customerId}");
         }
-        return await _unitOfWork.Bookings.Get(b => !b.IsDeleted && b.CustomerId == customerId).AsNoTracking().ToListAsync();
+        return await _unitOfWork.Bookings
+            .Get(b => !b.IsDeleted && b.CustomerId == customerId,
+            new Expression<Func<Booking, object>>[]
+            {
+                b => b.Customer!,
+                b => b.SalesEmployee!
+            })
+            .AsNoTracking()
+            .ToArrayAsync();
     }
 
     public async Task<IEnumerable<Booking>> GetAllBookingOfCustomer()
@@ -360,7 +400,14 @@ internal class BookingService : IBookingService
         {
             throw new ArgumentNullException(null, $"Customer Not Found with the given id: {userId}");
         }
-        return await _unitOfWork.Bookings.Get(b => b.CustomerId == userId && !b.IsDeleted ).AsNoTracking().ToListAsync();
+        return await _unitOfWork.Bookings
+            .Get(b => b.CustomerId == userId && !b.IsDeleted,
+            new Expression<Func<Booking, object>>[]
+            {
+                b => b.SalesEmployee!
+            })
+            .AsNoTracking()
+            .ToArrayAsync();
     }
 
     public async Task<ServiceResponse> SoftDelete(int bookingId)
@@ -393,6 +440,46 @@ internal class BookingService : IBookingService
                 IsSuccess = false,
                 Message = "Xóa thất bại",
                 Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> RestoreBooking(int id)
+    {
+        var deletedBooking = await _unitOfWork.Bookings.Get(b => b.Id == id && b.IsDeleted).FirstOrDefaultAsync();
+        if(deletedBooking is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy booking đã xóa",
+                Error = new List<string>() { "Can not find deleted booking with the given id: " + id  }
+            };
+        }
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == id.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(Booking)).FirstOrDefaultAsync();
+        if(log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        deletedBooking.IsDeleted = false;
+
+        if(await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
             };
         }
     }

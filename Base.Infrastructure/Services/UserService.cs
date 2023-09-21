@@ -1,4 +1,5 @@
-﻿using Base.Core.Application;
+﻿using Azure.Core;
+using Base.Core.Application;
 using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.ViewModel;
@@ -7,12 +8,15 @@ using Base.Infrastructure.IService;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Duende.IdentityServer.Extensions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System;
 using System.Linq.Expressions;
 using System.Text;
 using Role = Base.Core.Identity.Role;
@@ -28,8 +32,9 @@ internal class UserService : IUserService
     private readonly ICurrentUserService _currentUserService;
     private readonly IConfiguration _configuration;
     private readonly Cloudinary _cloudinary;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public UserService(UserManager<User> userManager, IUnitOfWork unitOfWork, ICurrentUserService currentUserService, RoleManager<Role> roleManager, IConfiguration configuration, Cloudinary cloudinary)
+    public UserService(UserManager<User> userManager, IUnitOfWork unitOfWork, ICurrentUserService currentUserService, RoleManager<Role> roleManager, IConfiguration configuration, Cloudinary cloudinary, IHttpContextAccessor httpContextAccessor)
     {
         //_logger = logger;
         _userManager = userManager;
@@ -38,6 +43,42 @@ internal class UserService : IUserService
         _roleManager = roleManager;
         _configuration = configuration;
         _cloudinary = cloudinary;
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public async Task<UserManagerResponse> ActivateEmailConfirmation(Guid userId)
+    {
+        var existedUser = await _userManager.FindByIdAsync(userId.ToString());
+        if (existedUser == null)
+        {
+            return new UserManagerResponse
+            {
+                Message = "Không tìm thấy tài khoản",
+                IsSuccess = false
+            };
+        }
+
+        if (existedUser.Email.IsNullOrEmpty())
+        {
+            return new UserManagerResponse
+            {
+                Message = "Chưa cung cấp email",
+                IsSuccess = false
+            };
+        }
+
+        var confirmEmailtoken = await _userManager.GenerateUserTokenAsync(existedUser, "UserTokenProvider", UserManager<User>.ConfirmEmailTokenPurpose);
+        var encodedEmailToken = Encoding.UTF8.GetBytes(confirmEmailtoken);
+        var validEmailToken = WebEncoders.Base64UrlEncode(encodedEmailToken);
+        string url = $"{_httpContextAccessor.HttpContext.GetIdentityServerBaseUrl()}/api/auth/confirmemail/user?userid={existedUser.Id}&token={validEmailToken}";
+
+        return new UserManagerResponse
+        {
+            IsSuccess = true,
+            Message = "Đã gửi mail xác thực, vui lòng kiểm tra",
+            ConfirmEmailUrl = url,
+            LoginUser = existedUser
+        };
     }
 
     public async Task<UserManagerResponse> ConfirmEmailAsync(Guid userId, string token)
@@ -283,7 +324,7 @@ internal class UserService : IUserService
             string? url = null;
             if (model.Email is not null && (existedUser.Email is null || !existedUser.Email.Equals(model.Email)))
             {
-                if((await _userManager.FindByEmailAsync(model.Email)) is not null)
+                if ((await _userManager.FindByEmailAsync(model.Email)) is not null)
                 {
                     return new UserManagerResponse
                     {
@@ -294,11 +335,9 @@ internal class UserService : IUserService
                 }
 
                 var confirmEmailtoken = await _userManager.GenerateUserTokenAsync(existedUser, "UserTokenProvider", UserManager<User>.ConfirmEmailTokenPurpose);
-
                 var encodedEmailToken = Encoding.UTF8.GetBytes(confirmEmailtoken);
                 var validEmailToken = WebEncoders.Base64UrlEncode(encodedEmailToken);
-
-                url = $"{_configuration["AppUrl"]}api/auth/confirmemail/user?userid={existedUser.Id}&token={validEmailToken}";
+                url = $"{_httpContextAccessor.HttpContext.GetIdentityServerBaseUrl()}/api/auth/confirmemail/user?userid={existedUser.Id}&token={validEmailToken}";
             }
 
             // Check if avatar is updated
@@ -362,6 +401,95 @@ internal class UserService : IUserService
                 IsSuccess = false,
                 Message = "Cập nhật thất bại",
                 Errors = new List<string>() { ex.Message }
+            };
+        }
+    }
+
+    public async Task<UserManagerResponse> UpdateInformationById(Guid id, UpdateInformationVM model)
+    {
+        var existedUser = await _userManager.FindByIdAsync(id.ToString());
+        if (existedUser == null)
+        {
+            return new UserManagerResponse
+            {
+                Message = "Không tìm thấy người dùng",
+                IsSuccess = false
+            };
+        }
+
+        // If Email is updated then make a verification for it
+        string? url = null;
+        if (model.Email is not null && (existedUser.Email is null || !existedUser.Email.Equals(model.Email)))
+        {
+            if ((await _userManager.FindByEmailAsync(model.Email)) is not null)
+            {
+                return new UserManagerResponse
+                {
+                    IsSuccess = false,
+                    Message = $"Email '{model.Email}' đã tồn tại",
+                    Errors = new List<string>() { $"Email '{model.Email}' has already existed" }
+                };
+            }
+
+            var confirmEmailtoken = await _userManager.GenerateUserTokenAsync(existedUser, "UserTokenProvider", UserManager<User>.ConfirmEmailTokenPurpose);
+
+            var encodedEmailToken = Encoding.UTF8.GetBytes(confirmEmailtoken);
+            var validEmailToken = WebEncoders.Base64UrlEncode(encodedEmailToken);
+
+            url = $"{_httpContextAccessor.HttpContext.GetIdentityServerBaseUrl()}/api/auth/confirmemail/user?userid={existedUser.Id}&token={validEmailToken}";
+        }
+
+        // Check if avatar is updated
+        var file = model.Avatar;
+        if (file is not null && file.Length > 0)
+        {
+            var uploadParams = new ImageUploadParams
+            {
+                File = new FileDescription(file.FileName, file.OpenReadStream())
+            };
+            var uploadResult = await _cloudinary.UploadAsync(uploadParams);
+
+            // Check if there is error while uploading file
+            if (uploadResult.Error != null)
+            {
+                return new UserManagerResponse
+                {
+                    IsSuccess = false,
+                    Message = "Tải file ảnh thất bại",
+                    Errors = new List<string> { uploadResult.Error.Message }
+                };
+            }
+
+            existedUser.FilePath = uploadResult.SecureUrl.ToString();
+        }
+
+        existedUser.Name = model.Name;
+        existedUser.PhoneNumber = model.PhoneNumber;
+        existedUser.Email = model.Email;
+        existedUser.NormalizedEmail = model.Email?.ToUpper();
+        existedUser.CitizenId = model.CitizenId;
+
+        if (url is not null)
+        {
+            existedUser.EmailConfirmed = false;
+        }
+
+        if (await _unitOfWork.SaveChangesAsync())
+        {
+            return new UserManagerResponse
+            {
+                IsSuccess = true,
+                Message = "Cập nhật thành công",
+                LoginUser = existedUser,
+                ConfirmEmailUrl = url
+            };
+        }
+        else
+        {
+            return new UserManagerResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại"
             };
         }
     }
@@ -516,7 +644,7 @@ internal class UserService : IUserService
 
     public async Task<UserManagerResponse> LoginUserAsync(LoginUserVM model)
     {
-        var user = await _unitOfWork.Users.Get(u => u.UserName == model.UserName) 
+        var user = await _unitOfWork.Users.Get(u => !u.IsDeleted && u.UserName == model.UserName) 
             .Include(nameof(User.Roles) + "." + nameof(Role.RoleClaims))
             .AsSplitQuery()
             .FirstOrDefaultAsync();
@@ -854,9 +982,18 @@ internal class UserService : IUserService
             u => u.Roles!,
             u => u.Customers!
         };
-        return await _unitOfWork.Users
+
+        var user = await _unitOfWork.Users
             .Get(u => !u.IsDeleted && u.Id == id, includes)
             .FirstOrDefaultAsync();
+
+        if(user != null)
+        {
+            user.Managers = GetAllManagers(user);
+            user.ManagedUsers = GetAllManagedUsers(user);
+        }
+
+        return user;
     }
 
     public async Task<IEnumerable<User>> GetAllManagedUser()
@@ -870,7 +1007,7 @@ internal class UserService : IUserService
             !u.IsDeleted &&
             u.PathFromRootManager.IsDescendantOf(user.PathFromRootManager) && 
             u != user;
-        return _unitOfWork.Users.Get(where);
+        return _unitOfWork.Users.Get(where, new Expression<Func<User, object>>[] {u => u.Roles!});
     }
 
     public async Task<IEnumerable<User>> GetAllManager()
@@ -931,6 +1068,45 @@ internal class UserService : IUserService
         }
     }
 
+    public async Task<ServiceResponse> RestoreUser(Guid customerId)
+    {
+        var deletedUser = await _unitOfWork.Users.Get(c => c.Id == customerId && c.IsDeleted).FirstOrDefaultAsync();
+        if (deletedUser is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng đã xóa",
+                Error = new List<string>() { "Can not find deleted user with the given id: " + customerId }
+            };
+        }
+        deletedUser.IsDeleted = false;
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == customerId.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(User)).FirstOrDefaultAsync();
+        if (log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        if (await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
+            };
+        }
+    }
+
     private async Task MoveNodes(User user, User manager)
     {
         // Get direct chidren of user
@@ -958,5 +1134,15 @@ internal class UserService : IUserService
                 await MoveNodes(child, user);
             }
         }
+    }
+
+    private IEnumerable<User>? GetAllManagers(User user)
+    {
+        return _unitOfWork.Users.Get(u => !u.IsDeleted && user.PathFromRootManager.IsDescendantOf(u.PathFromRootManager) && u != user);
+    }
+
+    private IEnumerable<User>? GetAllManagedUsers(User user)
+    {
+        return _unitOfWork.Users.Get(u => !u.IsDeleted && u.PathFromRootManager.IsDescendantOf(user.PathFromRootManager) && u != user);
     }
 }

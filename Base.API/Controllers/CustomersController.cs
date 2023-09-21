@@ -30,6 +30,50 @@ public class CustomersController : ControllerBase
         _mailService = mailService;
     }
 
+    [HttpPost("active-email/{customerId}")]
+    public async Task<IActionResult> ActiveEmail(Guid customerId)
+    {
+        if (ModelState.IsValid)
+        {
+            var result = await _customerService.ActivateEmailConfirmation(customerId);
+            if (result.IsSuccess)
+            {
+                if (result.ConfirmEmailUrl is not null)
+                {
+                    var url = result.ConfirmEmailUrl;
+                    await _mailService.SendMailAsync(new Message
+                    {
+                        To = result.LoginCustomer!.Email,
+                        Subject = "Confirm your email",
+                        Content = "<h2>Welcome to Voucher Solution</h2>" +
+                                $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
+                    });
+
+                    result.LoginCustomer = null;
+                    result.ConfirmEmailUrl = null;
+                    return Ok(result);
+                }
+
+                return BadRequest(new CustomerManagerResponse
+                {
+                    IsSuccess = false,
+                    Message = "Lỗi khi xác thực email",
+                    Errors = new List<string> { "Confirm email url is null" }
+                });
+            }
+
+            return BadRequest(result);
+        }
+        else
+        {
+            return BadRequest( new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ"
+            });
+        }
+    }
+
     [Authorize(Policy = "All")]
     [HttpGet("all-customers")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseCustomerInformationVM>))]
@@ -187,8 +231,8 @@ public class CustomersController : ControllerBase
 
     [HttpPut]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CustomerManagerResponse))]
-    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(CustomerManagerResponse))]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UpdateCustomerResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UpdateCustomerResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
     public async Task<IActionResult> UpdateInformation([FromForm] UpdateInformationVM resource)
     {
@@ -210,14 +254,14 @@ public class CustomersController : ControllerBase
                                     $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
                         });
                     }
-                    return Ok(result);
+                    return Ok(_mapper.Map<UpdateCustomerResponse>(result));
                 }
                 else
                 {
-                    return BadRequest(result);
+                    return BadRequest(_mapper.Map<UpdateCustomerResponse>(result));
                 }
             }
-            return BadRequest(new CustomerManagerResponse
+            return BadRequest(new UpdateCustomerResponse
             {
                 IsSuccess = false,
                 Message = "Dữ liệu không hợp lệ"
@@ -234,7 +278,57 @@ public class CustomersController : ControllerBase
         }
     }
 
-    [Authorize(Policy = "Write")]
+    [Authorize(Policy = "Update")]
+    [HttpPut("{CustomerId}")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UpdateCustomerResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UpdateCustomerResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> UpdateInformationById(Guid CustomerId, [FromForm] UpdateInformationVM resource)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _customerService.UpdateInformationById(CustomerId, resource);
+                if (result.IsSuccess)
+                {
+                    if (result.ConfirmEmailUrl is not null)
+                    {
+                        var url = result.ConfirmEmailUrl;
+                        await _mailService.SendMailAsync(new Message
+                        {
+                            To = result.LoginCustomer!.Email,
+                            Subject = "Confirm your email",
+                            Content = "<h2>Welcome to Voucher Solution</h2>" +
+                                    $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
+                        });
+                    }
+                    return Ok(_mapper.Map<UpdateCustomerResponse>(result));
+                }
+                else
+                {
+                    return BadRequest(_mapper.Map<UpdateCustomerResponse>(result));
+                }
+            }
+            return BadRequest(new UpdateCustomerResponse
+            {
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ"
+            });
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Update")]
     [HttpPatch("{CustomerId}")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CustomerManagerResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(CustomerManagerResponse))]
@@ -357,6 +451,48 @@ public class CustomersController : ControllerBase
             {
                 IsSuccess = false,
                 Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Restore")]
+    [HttpPatch("restore-customer/{customerId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> RestoreCustomer(Guid customerId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _customerService.RestoreCustomer(customerId);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
                 Error = new List<string>() { ex.Message }
             });
         }

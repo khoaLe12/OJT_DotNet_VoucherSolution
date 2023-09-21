@@ -15,6 +15,5 @@ public class ServicePackage : IAuditable
     public IEnumerable<VoucherType>? ValuableVoucherTypes { get; set; }
     public IEnumerable<Booking>? Bookings { get; set; }
     public IEnumerable<Service>? Services { get; set; }
-
     public bool IsDeleted { get; set; } = false;
 }

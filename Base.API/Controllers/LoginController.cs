@@ -18,14 +18,16 @@ namespace Base.API.Controllers
         private readonly IJWTTokenService _jwtTokenService;
         private readonly IMapper _mapper;
         private readonly IConfiguration _configuration;
+        private readonly IRoleService _roleService;
 
-        public AuthController(IUserService userService, ICustomerService customerService, IJWTTokenService jwtTokenService, IMapper mapper, IConfiguration configuration)
+        public AuthController(IUserService userService, ICustomerService customerService, IJWTTokenService jwtTokenService, IMapper mapper, IConfiguration configuration, IRoleService roleService)
         {
             _mapper = mapper;
             _userService = userService;
             _customerService = customerService;
             _jwtTokenService = jwtTokenService;
             _configuration = configuration;
+            _roleService = roleService;
         }
 
         [HttpPost]
@@ -40,12 +42,15 @@ namespace Base.API.Controllers
                 var result = await _userService.LoginUserAsync(resource);
                 if (result.IsSuccess)
                 {
-                    var tokenString = _jwtTokenService.CreateToken(result.LoginUser!);
+                    var claims = _roleService.GetRoleClaimsOfUser(result.LoginUser!);
+                    var tokenString = _jwtTokenService.CreateToken(result.LoginUser!, claims);
                     if (tokenString != null)
                     {
+                        var response = _mapper.Map<ResponseUserInformationVM>(result.LoginUser!);
+                        response.Permission = claims.Select(c => c.Value);
                         return Ok(new AuthenticatedResponse {
                             CustomerInformation = null,
-                            UserInformation = _mapper.Map<ResponseUserInformationVM>(result.LoginUser!),
+                            UserInformation = response,
                             Token = tokenString }) ;
                     }
                 }

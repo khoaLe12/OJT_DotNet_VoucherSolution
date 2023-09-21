@@ -19,6 +19,9 @@ public interface IExpiredDateExtensionService
     Task<ExpiredDateExtension?> GetExpiredDateExtensionById(int id);
     Task<ServiceResponse> UpdateVoucherExtension(UpdatedExpiredDateExtensionVM updatedExpiredDateExtension, int id);
     Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfUser();
+    Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfUserById(Guid userId);
     Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfCustomer();
+    Task<IEnumerable<ExpiredDateExtension>> GetAllExpiredDateExtensionOfCustomerById(Guid customerId);
     Task<ServiceResponse> SoftDelete(int id);
+    Task<ServiceResponse> RestoreVoucherExtension(int id);
 }

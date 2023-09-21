@@ -13,6 +13,12 @@ public class ItemMapper2 : Profile
 {
     public ItemMapper2()
     {
+        CreateMap<CustomerManagerResponse,UpdateCustomerResponse>()
+            .ForMember(dest => dest.LoginCustomer, opt => opt.MapFrom(src => src.LoginCustomer));
+
+        CreateMap<UserManagerResponse,UpdateUserResponse>()
+            .ForMember(dest => dest.LoginUser, opt => opt.MapFrom(src => src.LoginUser));
+
         CreateMap<Log, ResponseLogVM>()
             .ForMember(dest => dest.ActionType, opt => opt.MapFrom(src => Enum.GetName(typeof(AuditType), src.Type)))
             .ForMember(dest => dest.EntityName, opt => opt.MapFrom(src => src.TableName))
@@ -50,13 +56,16 @@ public class ItemMapper2 : Profile
 
         CreateMap<Customer, ResponseCustomerInformationVM>()
             .ForMember(dest => dest.Vouchers, opt => opt.MapFrom(src => src.Vouchers!.Where(v => !v.IsDeleted)))
-            .ForMember(dest => dest.Bookings, opt => opt.MapFrom(src => src.Bookings!.Where(b => !b.IsDeleted)));
+            .ForMember(dest => dest.Bookings, opt => opt.MapFrom(src => src.Bookings!.Where(b => !b.IsDeleted)))
+            .ForMember(dest => dest.Users, opt => opt.MapFrom(src => src.SalesEmployees!.Where(u => !u.IsDeleted)));
 
         CreateMap<User, ResponseUserVM>();
 
         CreateMap<User, ResponseUserInformationVM>()
             .ForMember(dest => dest.Customers, opt => opt.MapFrom(src => src.Customers!.Where(c => !c.IsDeleted)))
-            .ForMember(dest => dest.Roles, opt => opt.MapFrom(src => src.Roles!.Where(r => !r.IsDeleted)));
+            .ForMember(dest => dest.Roles, opt => opt.MapFrom(src => src.Roles!.Where(r => !r.IsDeleted)))
+            .ForMember(dest => dest.Managers, opt => opt.MapFrom(src => src.Managers))
+            .ForMember(dest => dest.ManagedUsers, opt => opt.MapFrom(src => src.ManagedUsers));
 
         CreateMap<ExpiredDateExtension, ResponseExpiredDateExtensionVM>()
             .ForMember(dest => dest.SalesEmployee, opt => opt.MapFrom(src => src.SalesEmployee!.IsDeleted ? null : src.SalesEmployee))

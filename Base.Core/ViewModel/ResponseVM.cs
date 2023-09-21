@@ -1,5 +1,6 @@
 ﻿using Base.Core.Entity;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -18,6 +19,7 @@ public class ResponseLogVM
     public string? EntityName { get; set; }
     public string? EntityId { get; set; }
     public Dictionary<string,object>? Changes { get; set; }
+    public bool? IsRestored { get; set; }
 }
 
 public class ResponseCustomerInformationVM
@@ -36,6 +38,7 @@ public class ResponseCustomerInformationVM
     public bool IsBlocked { get; set; }
     public IEnumerable<ResponseBookingVM>? Bookings { get; set; }
     public IEnumerable<ResponseVoucherVM>? Vouchers { get; set; }
+    public IEnumerable<ResponseUserVM>? Users { get; set; }
     public string? FilePath { get; set; }
 }
 
@@ -44,8 +47,6 @@ public class ResponseUserInformationVM
     public Guid Id { get; set; }
     public string? Name { get; set; }
     public string? CitizenId { get; set; }
-    public string? UserName { get; set; }
-    public string? NormalizedUserName { get; set; }
     public string? Email { get; set; }
     public string? NormalizedEmail { get; set; }
     public bool EmailConfirmed { get; set; }
@@ -58,7 +59,10 @@ public class ResponseUserInformationVM
     public ResponseUserVM? SalesManager { get; set; }
     public IEnumerable<ResponseCustomerVM>? Customers { get; set; }
     public IEnumerable<ResponseRoleForUserVM>? Roles { get; set; }
+    public IEnumerable<string>? Permission { get; set; }
     public string? FilePath { get; set; }
+    public IEnumerable<ResponseUserVM>? Managers { get; set; }
+    public IEnumerable<ResponseUserVM>? ManagedUsers { get; set; }
 }
 
 public class ResponseRoleForUserVM
@@ -92,6 +96,8 @@ public class ResponseUserVM
 {
     public Guid Id { get; set; }
     public string? Name { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? FilePath { get; set; }
 }
 
 public class ResponseServiceVM
@@ -206,3 +212,21 @@ public class ResponseVoucherTypeForExtensionVM
     public string? ConditionsAndPolicies { get; set; }
 }
 //===================================
+
+public class ResponseConsumptionStatisticVM
+{
+    public int Year { get; set; }
+    public Dictionary<int,Decimal>? MonthlyStatistic { get; set; }
+}
+
+public class ResponseServicePackageStatisticByNumberOfBookingsVM
+{
+    public string? ServicePackageName { get; set; }
+    public int BookingNumbers { get; set; }
+}
+
+public class ResponseServicePackageStatisticByTotalSpendingVM
+{
+    public string? ServicePackageName { get; set; }
+    public Decimal TotalSpending { get; set; }
+}

@@ -39,8 +39,6 @@ internal class ServiceService : IServiceService
     public async Task<ServiceResponse> UpdateInformation(ServiceVM updatedService, int serviceId)
     {
         var existedService = await _unitOfWork.Services.Get(s => s.Id == serviceId).FirstOrDefaultAsync();
-        var checkService = await _unitOfWork.Services.Get(s => s.ServiceName == updatedService.ServiceName).AsNoTracking().FirstOrDefaultAsync();
-
         if (existedService == null)
         {
             return new ServiceResponse
@@ -50,15 +48,19 @@ internal class ServiceService : IServiceService
                 Error = new List<string>() { "Can not find service with the given id: " + serviceId }
             };
         }
-        
-        if(checkService != null)
+
+        if(existedService.ServiceName != updatedService.ServiceName)
         {
-            return new ServiceResponse
+            var checkService = await _unitOfWork.Services.Get(s => s.ServiceName == updatedService.ServiceName).AsNoTracking().FirstOrDefaultAsync();
+            if (checkService != null)
             {
-                IsSuccess = false,
-                Message = $"Dịch vụ '{updatedService.ServiceName}' đã tồn tại",
-                Error = new List<string>() { $"Service '{updatedService.ServiceName}' already exist" }
-            };
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = $"Dịch vụ '{updatedService.ServiceName}' đã tồn tại",
+                    Error = new List<string>() { $"Service '{updatedService.ServiceName}' already exist" }
+                };
+            }
         }
 
         existedService.ServiceName = updatedService.ServiceName!;
@@ -88,7 +90,19 @@ internal class ServiceService : IServiceService
         var existedService = await _unitOfWork.Services.Get(s => s.ServiceName == service.ServiceName).FirstOrDefaultAsync();
         if(existedService != null)
         {
-            throw new ArgumentException($"Dịch vụ '{existedService.ServiceName}' đã tồn tại");
+            if(existedService.IsDeleted == true)
+            {
+                throw new CustomException($"Dịch vụ '{existedService.ServiceName}' đã tồn tại")
+                {
+                    Errors = new List<string>() { $"Service '{existedService.ServiceName}' already exists but has been deleted, you need to restore it" },
+                    IsRestored = true
+                };
+            }
+
+            throw new CustomException($"Dịch vụ '{existedService.ServiceName}' đã tồn tại")
+            {
+                Errors = new List<string>() { $"Service '{existedService.ServiceName}' has already existed" }
+            };
         }
 
         await _unitOfWork.Services.AddAsync(service);
@@ -129,6 +143,45 @@ internal class ServiceService : IServiceService
                 IsSuccess = false,
                 Message = "Xóa thất bại",
                 Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> RestoreService(int id)
+    {
+        var deletedService = await _unitOfWork.Services.Get(s => s.Id == id && s.IsDeleted).FirstOrDefaultAsync();
+        if (deletedService is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy service đã xóa",
+                Error = new List<string>() { "Can not find deleted service with the given id: " + id }
+            };
+        }
+        deletedService.IsDeleted = false;
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == id.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(Service)).FirstOrDefaultAsync();
+        if (log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        if (await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
             };
         }
     }

@@ -101,6 +101,37 @@ namespace Base.API.Controllers
             }
         }
 
+        [Authorize(Policy = "Read")]
+        [HttpGet("User/{userId}")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseExpiredDateExtensionVM>))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+        public async Task<IActionResult> GetAllExpiredDateExtensionOfUserById(Guid userId)
+        {
+            try
+            {
+                var result = await _expiredDateExtensionService.GetAllExpiredDateExtensionOfUserById(userId);
+                return Ok(_mapper.Map<IEnumerable<ResponseExpiredDateExtensionVM>>(result));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Hành động không hợp lệ",
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy người dùng",
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+        }
+
         [Authorize(Policy = "Customer")]
         [HttpGet("Customer")]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseExpiredDateExtensionVM>))]
@@ -110,6 +141,37 @@ namespace Base.API.Controllers
             try
             {
                 var result = await _expiredDateExtensionService.GetAllExpiredDateExtensionOfCustomer();
+                return Ok(_mapper.Map<IEnumerable<ResponseExpiredDateExtensionVM>>(result));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Hành động không hợp lệ",
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy người dùng",
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+        }
+
+        [Authorize(Policy = "Read")]
+        [HttpGet("Customer/{customerId}")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseExpiredDateExtensionVM>))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+        public async Task<IActionResult> GetAllExpiredDateExtensionOfCustomer(Guid customerId)
+        {
+            try
+            {
+                var result = await _expiredDateExtensionService.GetAllExpiredDateExtensionOfCustomerById(customerId);
                 return Ok(_mapper.Map<IEnumerable<ResponseExpiredDateExtensionVM>>(result));
             }
             catch (InvalidOperationException ex)
@@ -299,6 +361,48 @@ namespace Base.API.Controllers
                 {
                     IsSuccess = false,
                     Message = "Cập nhật thất bại",
+                    Error = new List<string>() { ex.Message }
+                });
+            }
+        }
+
+        [Authorize(Policy = "Restore")]
+        [HttpPatch("restore-voucherextension/{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+        public async Task<IActionResult> RestoreVoucherExtension(int id)
+        {
+            try
+            {
+                if (ModelState.IsValid)
+                {
+                    var result = await _expiredDateExtensionService.RestoreVoucherExtension(id);
+                    if (result.IsSuccess)
+                    {
+                        return Ok(result);
+                    }
+                    else
+                    {
+                        return BadRequest(result);
+                    }
+                }
+                else
+                {
+                    return BadRequest(new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Dữ liệu không hợp lệ",
+                        Error = new List<string>() { "Invalid input" }
+                    });
+                }
+            }
+            catch (DbUpdateException ex)
+            {
+                return StatusCode(500, new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Khôi phục thất bại",
                     Error = new List<string>() { ex.Message }
                 });
             }

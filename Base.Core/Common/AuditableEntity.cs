@@ -14,6 +14,7 @@ public abstract class AuditableEntity
     public string? TableName { get; set; }
     public string? PrimaryKey { get; set; }
     public Dictionary<string,object>?  Changes { get; set; }
+    public bool? IsRestored { get; set; }
 
     [NotMapped]
     public List<PropertyEntry>? TempProperties { get; set; }

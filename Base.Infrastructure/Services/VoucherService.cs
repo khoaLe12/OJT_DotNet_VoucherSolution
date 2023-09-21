@@ -2,6 +2,7 @@
 using Base.Core.Common;
 using Base.Core.Entity;
 using Base.Core.Enum;
+using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
@@ -218,12 +219,12 @@ internal class VoucherService : IVoucherService
 
     public IEnumerable<Voucher> GetAllVoucher()
     {
-        return _unitOfWork.Vouchers.FindAll().Where(v => !v.IsDeleted);
+        return _unitOfWork.Vouchers.FindAll().Where(v => !v.IsDeleted).Include(v => v.Customer);
     }
 
     public IEnumerable<Voucher> GetAllDeletedVoucher()
     {
-        return _unitOfWork.Vouchers.FindAll().Where(v => v.IsDeleted);
+        return _unitOfWork.Vouchers.FindAll().Include(v => v.Customer).Include(v => v.SalesEmployee).Where(v => v.IsDeleted);
     }
 
     public async Task<IEnumerable<Voucher>> GetAllVoucherOfUser()
@@ -237,6 +238,22 @@ internal class VoucherService : IVoucherService
         return await _unitOfWork.Vouchers.Get(v => !v.IsDeleted && v.SalesEmployeeId == userId).AsNoTracking().ToListAsync();
     }
 
+    public async Task<IEnumerable<Voucher>> GetAllVoucherOfUserById(Guid userId)
+    {
+        var user = await _unitOfWork.Users.FindAsync(userId);
+        if (user is null)
+        {
+            throw new ArgumentNullException(null, $"User Not Found with the given id: {userId}");
+        }
+        return await _unitOfWork.Vouchers
+            .Get(v => !v.IsDeleted && v.SalesEmployeeId == userId, new Expression<Func<Voucher, object>>[]
+            {
+                v => v.VoucherType!
+            })
+            .AsNoTracking()
+            .ToArrayAsync();
+    }
+
     public async Task<IEnumerable<Voucher>> GetAllVoucherOfCustomer()
     {
         var userId = _currentUserService.UserId;
@@ -245,7 +262,14 @@ internal class VoucherService : IVoucherService
         {
             throw new ArgumentNullException(null, "Không tìm thấy người dùng");
         }
-        return await _unitOfWork.Vouchers.Get(v => !v.IsDeleted && v.CustomerId == userId).AsNoTracking().ToListAsync();
+        return await _unitOfWork.Vouchers
+            .Get(v => !v.IsDeleted && v.CustomerId == userId,
+                new Expression<Func<Voucher, object>>[]
+                {
+                    v => v.VoucherType!
+                })
+            .AsNoTracking()
+            .ToListAsync();
     }
 
     public async Task<IEnumerable<Voucher>> GetAllVoucherOfCustomerById(Guid customerId)
@@ -255,7 +279,14 @@ internal class VoucherService : IVoucherService
         {
             throw new ArgumentNullException(null, $"Customer Not Found with the given id: {customerId}");
         }
-        return await _unitOfWork.Vouchers.Get(v => !v.IsDeleted && v.CustomerId == customerId).AsNoTracking().ToListAsync();
+        return await _unitOfWork.Vouchers
+            .Get(v => !v.IsDeleted && v.CustomerId == customerId,
+                new Expression<Func<Voucher, object>>[]
+                {
+                    v => v.VoucherType!
+                })
+            .AsNoTracking()
+            .ToListAsync();
     }
 
     public async Task<Voucher?> GetVoucherById(int id)
@@ -302,6 +333,45 @@ internal class VoucherService : IVoucherService
                 IsSuccess = false,
                 Message = "Xóa thất bại",
                 Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> RestoreVoucher(int id)
+    {
+        var deletedVoucher = await _unitOfWork.Vouchers.Get(v => v.Id == id && v.IsDeleted).FirstOrDefaultAsync();
+        if (deletedVoucher is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy voucher đã xóa",
+                Error = new List<string>() { "Can not find deleted voucher with the given id: " + id }
+            };
+        }
+        deletedVoucher.IsDeleted = false;
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == id.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(Voucher)).FirstOrDefaultAsync();
+        if (log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        if (await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
             };
         }
     }

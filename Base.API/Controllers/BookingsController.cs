@@ -101,6 +101,40 @@ public class BookingsController : ControllerBase
         }
     }
 
+    [Authorize(Policy = "Read")]
+    [HttpGet("User/{userId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseBookingVM>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetAllBookingsOfUserById(Guid userId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _bookingService.GetAllBookingOfUserById(userId);
+                return Ok(_mapper.Map<IEnumerable<ResponseBookingVM>>(result));
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (ArgumentNullException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
     [Authorize(Policy = "Customer")]
     [HttpGet("Customer")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseBookingVM>))]
@@ -379,6 +413,48 @@ public class BookingsController : ControllerBase
             {
                 IsSuccess = false,
                 Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Restore")]
+    [HttpPatch("restore-booking/{bookingId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> RestoreBooking(int bookingId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _bookingService.RestoreBooking(bookingId);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
                 Error = new List<string>() { ex.Message }
             });
         }

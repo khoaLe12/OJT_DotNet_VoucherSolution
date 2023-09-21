@@ -2,6 +2,7 @@
 using Base.API.Services;
 using Base.Core.Common;
 using Base.Core.Entity;
+using Base.Core.Identity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.IService;
 using Microsoft.AspNetCore.Authorization;
@@ -25,6 +26,50 @@ public class UsersController : ControllerBase
         _userService = userService;
         _mapper = mapper;
         _mailService = mailService;
+    }
+
+    [HttpPost("active-email/{userId}")]
+    public async Task<IActionResult> ActiveEmail(Guid userId)
+    {
+        if (ModelState.IsValid)
+        {
+            var result = await _userService.ActivateEmailConfirmation(userId);
+            if (result.IsSuccess)
+            {
+                if (result.ConfirmEmailUrl is not null)
+                {
+                    var url = result.ConfirmEmailUrl;
+                    await _mailService.SendMailAsync(new Message
+                    {
+                        To = result.LoginUser!.Email,
+                        Subject = "Confirm your email",
+                        Content = "<h2>Welcome to Voucher Solution</h2>" +
+                                $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
+                    });
+
+                    result.LoginUser = null;
+                    result.ConfirmEmailUrl = null;
+                    return Ok(result);
+                }
+
+                return BadRequest(new CustomerManagerResponse
+                {
+                    IsSuccess = false,
+                    Message = "Lỗi khi xác thực email",
+                    Errors = new List<string> { "Confirm email url is null" }
+                });
+            }
+
+            return BadRequest(result);
+        }
+        else
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Dữ liệu không hợp lệ"
+            });
+        }
     }
 
     [Authorize(Policy = "All")]
@@ -254,8 +299,8 @@ public class UsersController : ControllerBase
 
     [HttpPut]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UserManagerResponse))]
-    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UserManagerResponse))]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UpdateUserResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UpdateUserResponse))]
     public async Task<IActionResult> UpdateInformation([FromForm] UpdateInformationVM resource)
     {
         if (ModelState.IsValid)
@@ -274,14 +319,51 @@ public class UsersController : ControllerBase
                             $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
                     });
                 }
-                return Ok(result);
+                return Ok(_mapper.Map<UpdateUserResponse>(result));
             }
             else
             {
-                return BadRequest(result);
+                return BadRequest(_mapper.Map<UpdateUserResponse>(result));
             }
         }
-        return BadRequest(new UserManagerResponse
+        return BadRequest(new UpdateUserResponse
+        {
+            IsSuccess = false,
+            Message = "Dữ liệu không hợp lệ"
+        });
+    }
+
+    [Authorize(Policy = "Update")]
+    [HttpPut("{UserId}")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UpdateUserResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(UpdateUserResponse))]
+    public async Task<IActionResult> UpdateInformationById(Guid UserId, [FromForm] UpdateInformationVM resource)
+    {
+        if (ModelState.IsValid)
+        {
+            var result = await _userService.UpdateInformationById(UserId, resource);
+            if (result.IsSuccess)
+            {
+                if (result.ConfirmEmailUrl is not null)
+                {
+                    var url = result.ConfirmEmailUrl;
+                    await _mailService.SendMailAsync(new Message
+                    {
+                        To = result.LoginUser!.Email,
+                        Subject = "Confirm your email",
+                        Content = "<h2>Welcome to Voucher Solution</h2>" +
+                            $"<p>Please confirm your email by <a href='{url}'>clicking here</a> </p>"
+                    });
+                }
+                return Ok(_mapper.Map<UpdateUserResponse>(result));
+            }
+            else
+            {
+                return BadRequest(_mapper.Map<UpdateUserResponse>(result));
+            }
+        }
+        return BadRequest(new UpdateUserResponse
         {
             IsSuccess = false,
             Message = "Dữ liệu không hợp lệ"
@@ -385,6 +467,48 @@ public class UsersController : ControllerBase
             {
                 IsSuccess = false,
                 Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Restore")]
+    [HttpPatch("restore-user/{userId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> RestoreUser(Guid userId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _userService.RestoreUser(userId);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
                 Error = new List<string>() { ex.Message }
             });
         }

@@ -131,12 +131,6 @@ internal class VoucherTypeService : IVoucherTypeService
 
     public async Task<VoucherType?> AddNewVoucherType(VoucherType voucherType, IEnumerable<int>? ServicePackageIds)
     {
-        /*var existedVoucherType = await _unitOfWork.VoucherTypes.Get(vt => !vt.IsDeleted && vt.TypeName == voucherType.TypeName).FirstOrDefaultAsync();
-        if(existedVoucherType != null)
-        {
-            throw new ArgumentException($"Loại voucher '{existedVoucherType.TypeName}' đã tồn tại");
-        }*/
-
         if (ServicePackageIds != null)
         {
             var servicePackageList = new List<ServicePackage>();
@@ -210,6 +204,82 @@ internal class VoucherTypeService : IVoucherTypeService
                 IsSuccess = false,
                 Message = "Xóa thất bại",
                 Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> SoftDeleteBatch(IEnumerable<int> ids)
+    {
+        foreach(var id in ids)
+        {
+            var existedVoucherType = await _unitOfWork.VoucherTypes.Get(sp => sp.Id == id && !sp.IsDeleted).FirstOrDefaultAsync();
+            if (existedVoucherType == null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy loại voucher",
+                    Error = new List<string>() { "Can not find voucher type with the given id: " + id }
+                };
+            }
+
+            existedVoucherType.IsDeleted = true;
+        }
+
+        if (await _unitOfWork.SaveDeletedChangesAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Xóa thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Xóa thất bại",
+                Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> RestoreVoucherType(int id)
+    {
+        var deletedVoucherType = await _unitOfWork.VoucherTypes.Get(vt => vt.Id == id && vt.IsDeleted).FirstOrDefaultAsync();
+        if (deletedVoucherType is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy loại voucher đã xóa",
+                Error = new List<string>() { "Can not find deleted voucher type with the given id: " + id }
+            };
+        }
+        deletedVoucherType.IsDeleted = false;
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == id.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(VoucherType)).FirstOrDefaultAsync();
+        if (log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        if (await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
             };
         }
     }

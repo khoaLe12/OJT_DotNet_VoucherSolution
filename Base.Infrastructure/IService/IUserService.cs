@@ -8,6 +8,7 @@ namespace Base.Infrastructure.IService;
 
 public interface IUserService
 {
+    Task<UserManagerResponse> ActivateEmailConfirmation(Guid userId);
     Task<UserManagerResponse> ConfirmEmailAsync(Guid userId, string token);
     Task<UserManagerResponse> RegisterNewUserAsync(UserVM model);
     Task<UserManagerResponse> LoginUserAsync(LoginUserVM model);
@@ -22,7 +23,9 @@ public interface IUserService
     Task<UserManagerResponse> ForgetPasswordAsync(string email);
     Task<UserManagerResponse> AssignManager(Guid ManagerId, Guid UserId);
     Task<UserManagerResponse> UpdateInformation(UpdateInformationVM model);
+    Task<UserManagerResponse> UpdateInformationById(Guid id, UpdateInformationVM model);
     Task<UserManagerResponse> PatchUpdate(Guid userId, JsonPatchDocument<User> patchDoc, ModelStateDictionary ModelState);
     Task<UserManagerResponse> UpdateRoleOfUser(Guid userId, IEnumerable<UpdatedRolesOfUserVM> model);
     Task<ServiceResponse> SoftDelete(Guid id);
+    Task<ServiceResponse> RestoreUser(Guid customerId);
 }

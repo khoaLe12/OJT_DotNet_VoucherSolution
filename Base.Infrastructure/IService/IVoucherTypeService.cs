@@ -20,4 +20,6 @@ public interface IVoucherTypeService
     Task<ServiceResponse> PatchUpdate(int voucherTypeId, JsonPatchDocument<VoucherType> patchDoc, ModelStateDictionary ModelState);
     Task<ServiceResponse> UpdateVoucherType(UpdatedVoucherTypeVM updatedVoucherType, int voucherTypeId);
     Task<ServiceResponse> SoftDelete(int id);
+    Task<ServiceResponse> SoftDeleteBatch(IEnumerable<int> ids);
+    Task<ServiceResponse> RestoreVoucherType(int id);
 }

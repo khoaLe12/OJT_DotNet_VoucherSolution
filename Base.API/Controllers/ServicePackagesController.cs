@@ -120,7 +120,8 @@ public class ServicePackagesController : ControllerBase
             {
                 IsSuccess = false,
                 Message = ex.Message,
-                Error = ex.Errors
+                Error = ex.Errors,
+                IsRestored = ex.IsRestored
             });
         }
         catch (DbUpdateException ex)
@@ -139,7 +140,7 @@ public class ServicePackagesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<UpdatedVoucherTypesInPackageVM> resource)
+    public async Task<IActionResult> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<int> resource)
     {
         try
         {
@@ -223,7 +224,7 @@ public class ServicePackagesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
-    public async Task<IActionResult> UpdateServicesInServicePackage(int servicePackageId, [FromBody] IEnumerable<UpdatedServicesInPackageVM> resource)
+    public async Task<IActionResult> UpdateServicesInServicePackage(int servicePackageId, [FromBody] IEnumerable<int> resource)
     {
         try
         {
@@ -348,6 +349,48 @@ public class ServicePackagesController : ControllerBase
             {
                 IsSuccess = false,
                 Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Restore")]
+    [HttpPatch("restore-servicepackage/{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> RestoreServicePackage(int id)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _servicePackageService.RestoreServicePackage(id);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
                 Error = new List<string>() { ex.Message }
             });
         }

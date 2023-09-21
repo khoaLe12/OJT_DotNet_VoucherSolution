@@ -1,10 +1,13 @@
-﻿using Base.API.Mapper.ModelToResource;
+﻿using Base.API.Filter;
+using Base.API.Mapper.ModelToResource;
 using Base.API.Mapper.ResourceToModel;
 using Base.API.Middleware;
 using Base.API.Permission;
 using Base.API.Services;
 using Base.Core.Application;
 using Base.Infrastructure;
+using Hangfire;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
@@ -38,7 +41,7 @@ namespace Base.API
 
             services.AddAutoMapper(typeof(ItemMapper1), typeof(ItemMapper2));
             services.AddInfrastructure(Configuration);
-
+            services.AddScoped<IBackgroundTaskService, BackgroundTaskService>();
             services.AddScoped<IJWTTokenService, JWTTokenService>();
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             services.AddSingleton<ICurrentUserService,CurrentUserService>();
@@ -190,6 +193,11 @@ namespace Base.API
                 options.AddPolicy("Log", policy =>
                 {
                     policy.Requirements.Add(new HasScopeRequirement("Log", Configuration["Jwt:Issuer"]!));
+                }); 
+
+                options.AddPolicy("Statistic", policy =>
+                {
+                    policy.Requirements.Add(new HasScopeRequirement("Statistic", Configuration["Jwt:Issuer"]!));
                 });
             });
 
@@ -197,12 +205,33 @@ namespace Base.API
             {
                 options.AddPolicy("ClientPermission", policy =>
                 {
-                    policy.AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .WithOrigins("http://localhost:3000")
-                        .AllowCredentials();
+                    policy
+                        .WithOrigins("http://vm.e-biz.com.vn",
+                                     "http://fevm.e-biz.com.vn",
+                                     "http://localhost:3000")
+                        .AllowAnyHeader()
+                        .AllowAnyMethod();
                 });
             });
+
+            services.AddHangfire(configuration =>
+            {
+                configuration
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings()
+                .UseSqlServerStorage(Configuration.GetConnectionString("MsSQLConnection"), new SqlServerStorageOptions
+                {
+                    CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                    SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                    QueuePollInterval = TimeSpan.Zero,
+                    UseRecommendedIsolationLevel = true,
+                    DisableGlobalLocks = true,
+                });
+            });
+                
+
+            services.AddHangfireServer();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -245,15 +274,26 @@ namespace Base.API
 
             app.UseHttpsRedirection();
 
-            app.UseStaticFiles();
+            app.UseHangfireDashboard("/hangfire", new DashboardOptions
+            {
+                Authorization = new[] {new AuthorizationFilter()}
+            });
 
-            app.UseCors("ClientPermission");
+            app.UseStaticFiles();
+            // app.UseCookiePolicy();
 
             app.UseRouting();
+            // app.UseRateLimiter();
+            // app.UseRequestLocalization();
+
+            app.UseCors("ClientPermission");
 
             app.UseAuthentication();
 
             app.UseAuthorization();
+            // app.UseSession();
+            // app.UseResponseCompression();
+            // app.UseResponseCaching();
 
             app.UseEndpoints(endpoints =>
             {

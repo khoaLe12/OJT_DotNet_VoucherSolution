@@ -1,5 +1,6 @@
 ﻿using Base.Core.Common;
 using Base.Core.Entity;
+using Base.Core.ViewModel;
 using Microsoft.AspNetCore.Identity;
 
 namespace Base.Core.Identity;
@@ -32,4 +33,12 @@ public class CustomerManagerResponse
     public IEnumerable<string>? Errors { get; set; }
     public Customer? LoginCustomer { get; set; }
     public string? ConfirmEmailUrl { get; set; }
+}
+
+public class UpdateCustomerResponse
+{
+    public string? Message { get; set; }
+    public bool IsSuccess { get; set; }
+    public IEnumerable<string>? Errors { get; set; }
+    public ResponseCustomerInformationVM? LoginCustomer { get; set; }
 }

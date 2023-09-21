@@ -33,6 +33,15 @@ namespace Base.Infrastructure.Services
                 var identityRole = await _unitOfWork.Roles.Get(r => r.Name == model.RoleName).FirstOrDefaultAsync();
                 if (identityRole != null)
                 {
+                    if(identityRole.IsDeleted == true)
+                    {
+                        throw new CustomException("Vai trò đã tồn tại")
+                        {
+                            Errors = new List<string>() { $"Role name '{model.RoleName}' already exists but has been deleted, you need to restored it" },
+                            IsRestored = true
+                        };
+                    }
+
                     throw new CustomException("Vai trò đã tồn tại")
                     {
                         Errors = new List<string>() { $"Role name '{model.RoleName}' has already existed" }
@@ -87,8 +96,6 @@ namespace Base.Infrastructure.Services
         public async Task<ServiceResponse> UpdateRole(Guid roleId, UpdatedRoleVM updatedRole)
         {
             var existedRole = await _roleManager.FindByIdAsync(roleId.ToString());
-            var checkRole = await _roleManager.FindByNameAsync(updatedRole.RoleName);
-
             if (existedRole == null)
             {
                 return new ServiceResponse
@@ -99,14 +106,18 @@ namespace Base.Infrastructure.Services
                 };
             }
 
-            if(checkRole != null)
+            if(existedRole.Name != updatedRole.RoleName)
             {
-                return new ServiceResponse
+                var checkRole = await _roleManager.FindByNameAsync(updatedRole.RoleName);
+                if (checkRole != null)
                 {
-                    IsSuccess = false,
-                    Message = "Tên vai trò đã tồn tại",
-                    Error = new List<string>() { $"Role name '{checkRole.Name}' has already existed" }
-                };
+                    return new ServiceResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Tên vai trò đã tồn tại",
+                        Error = new List<string>() { $"Role name '{checkRole.Name}' has already existed" }
+                    };
+                }
             }
 
             existedRole.Name = updatedRole.RoleName;
@@ -257,12 +268,15 @@ namespace Base.Infrastructure.Services
                     return;
                 }
 
-                var existedRoleClaim = existedRoleClaims.FirstOrDefault(rc => rc.ClaimValue.Contains(claim.Resource!));
-                if (existedRoleClaim is not null)
+                if (!existedClaim.ClaimValue.Contains(claim.Resource!))
                 {
-                    exceptions.Enqueue(new ArgumentException($"Resource '{claim.Resource}' already existed"));
-                    state.Stop();
-                    return;
+                    var existedRoleClaim = existedRoleClaims.FirstOrDefault(rc => rc.ClaimValue.Contains(claim.Resource!));
+                    if (existedRoleClaim is not null)
+                    {
+                        exceptions.Enqueue(new ArgumentException($"Resource '{claim.Resource}' already existed"));
+                        state.Stop();
+                        return;
+                    }
                 }
 
                 existedClaim.ClaimValue = GetAction(claim);
@@ -435,6 +449,44 @@ namespace Base.Infrastructure.Services
             }
         }
 
+        public async Task<ServiceResponse> RestoreRole(Guid id)
+        {
+            var deletedRole = await _unitOfWork.Roles.Get(b => b.Id == id && b.IsDeleted).FirstOrDefaultAsync();
+            if (deletedRole is null)
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Không tìm thấy vai trò đã xóa",
+                    Error = new List<string>() { "Can not find deleted role with the given id: " + id }
+                };
+            }
+            deletedRole.IsDeleted = false;
+
+            var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == id.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(Role)).FirstOrDefaultAsync();
+            if (log is not null)
+            {
+                log.IsRestored = true;
+            }
+
+            if (await _unitOfWork.SaveChangesNoLogAsync())
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = true,
+                    Message = "Khôi phục thành công"
+                };
+            }
+            else
+            {
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Khôi phục thất bại",
+                    Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
+                };
+            }
+        }
 
 
         private string UpdateAction(string originalValue, string updateValue)

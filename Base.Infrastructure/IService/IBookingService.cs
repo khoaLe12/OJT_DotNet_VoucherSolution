@@ -19,8 +19,10 @@ public interface IBookingService
     IEnumerable<Booking> GetAllDeletedBookings();
     Task<Booking?> GetBookingById(int id);
     Task<ServiceResponse> UpdateBooking(UpdatedBookingVM updatedBooking, int bookingId);
+    Task<IEnumerable<Booking>> GetAllBookingOfUserById(Guid userId);
     Task<IEnumerable<Booking>> GetAllBookingOfUser();
     Task<IEnumerable<Booking>> GetAllBookingOfCustomerById(Guid customerId);
     Task<IEnumerable<Booking>> GetAllBookingOfCustomer();
     Task<ServiceResponse> SoftDelete(int bookingId);
+    Task<ServiceResponse> RestoreBooking(int id);
 }

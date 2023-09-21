@@ -10,6 +10,7 @@ public class CustomException : Exception
 {
     public override string Message { get; }
     public IEnumerable<string>? Errors { get; set; }
+    public bool IsRestored { get; set; } = false;
 
     public CustomException(string message)
 	{

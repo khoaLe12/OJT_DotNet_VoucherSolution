@@ -26,5 +26,6 @@ namespace Base.Infrastructure.IService
         IEnumerable<Claim> GetRoleClaimsOfUser(User user);
         Task<ServiceResponse> SoftDeleteRole(Guid id);
         Task<ServiceResponse> DeleteRoleClaim(int id);
+        Task<ServiceResponse> RestoreRole(Guid id);
     }
 }

@@ -3,6 +3,7 @@ using Base.Core.Entity;
 using Base.Core.ViewModel;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.IService;
+using Duende.IdentityServer.Extensions;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
@@ -18,7 +19,7 @@ internal class ServicePackageService : IServicePackageService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ServiceResponse> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<UpdatedVoucherTypesInPackageVM> model)
+    public async Task<ServiceResponse> UpdateVoucherTypesOnServicePackage(int servicePackageId, IEnumerable<int> model)
     {
         var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.Id == servicePackageId, sp => sp.ValuableVoucherTypes!).FirstOrDefaultAsync();
         if (existedServicePackage == null)
@@ -31,38 +32,7 @@ internal class ServicePackageService : IServicePackageService
             };
         }
 
-        var voucherTypes = existedServicePackage.ValuableVoucherTypes!.ToList();
-        foreach (var item in model)
-        {
-            if (item.IsDeleted)
-            {
-                var existedVoucherType = voucherTypes.FirstOrDefault(vt => vt.Id == item.VoucherTypeId);
-                if(existedVoucherType is null)
-                {
-                    return new ServiceResponse
-                    {
-                        IsSuccess = false,
-                        Message = "Không tìm thấy loại voucher",
-                        Error = new List<string>() { $"Can not find applied voucher type with id '{item.VoucherTypeId}'" }
-                    };
-                }
-                voucherTypes.Remove(existedVoucherType);
-            }
-            else
-            {
-                var existedVoucherType = await _unitOfWork.VoucherTypes.FindAsync(item.VoucherTypeId);
-                if (existedVoucherType is null)
-                {
-                    return new ServiceResponse
-                    {
-                        IsSuccess = false,
-                        Message = "Không tìm thấy loại voucher",
-                        Error = new List<string>() { $"Can not find voucher type with id '{item.VoucherTypeId}'" }
-                    };
-                }
-                voucherTypes.Add(existedVoucherType);
-            }
-        }
+        var voucherTypes = await _unitOfWork.VoucherTypes.Get(vt => model.Contains(vt.Id)).ToListAsync();
 
         existedServicePackage.ValuableVoucherTypes = voucherTypes;
 
@@ -88,8 +58,6 @@ internal class ServicePackageService : IServicePackageService
     public async Task<ServiceResponse> UpdateInformation(int servicePackageId, UpdatedServicePackageVM updatedServicePackage)
     {
         var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.Id == servicePackageId).FirstOrDefaultAsync();
-        var checkServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.ServicePackageName == updatedServicePackage.ServicePackageName).AsNoTracking().FirstOrDefaultAsync();
-
         if (existedServicePackage == null)
         {
             return new ServiceResponse
@@ -100,14 +68,18 @@ internal class ServicePackageService : IServicePackageService
             };
         }
 
-        if(checkServicePackage != null)
+        if(existedServicePackage.ServicePackageName != updatedServicePackage.ServicePackageName)
         {
-            return new ServiceResponse
+            var checkServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.ServicePackageName == updatedServicePackage.ServicePackageName).AsNoTracking().FirstOrDefaultAsync();
+            if (checkServicePackage != null)
             {
-                IsSuccess = false,
-                Message = $"Gói dịch vụ '{updatedServicePackage.ServicePackageName}' đã tồn tại",
-                Error = new List<string>() { $"Service package '{updatedServicePackage.ServicePackageName}' already exist" }
-            };
+                return new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = $"Gói dịch vụ '{updatedServicePackage.ServicePackageName}' đã tồn tại",
+                    Error = new List<string>() { $"Service package '{updatedServicePackage.ServicePackageName}' already exist" }
+                };
+            }
         }
 
         existedServicePackage.ServicePackageName = updatedServicePackage.ServicePackageName!;
@@ -132,7 +104,7 @@ internal class ServicePackageService : IServicePackageService
         }
     }
 
-    public async Task<ServiceResponse> UpdateServiceOfServicePackage(IEnumerable<UpdatedServicesInPackageVM> model, int servicePackageId)
+    public async Task<ServiceResponse> UpdateServiceOfServicePackage(IEnumerable<int> serviceIds, int servicePackageId)
     {
         var existedServicePackage = await _unitOfWork.ServicePackages.Get(s => s.Id == servicePackageId, sp => sp.Services!).FirstOrDefaultAsync();
 
@@ -146,38 +118,15 @@ internal class ServicePackageService : IServicePackageService
             };
         }
 
-        var services = existedServicePackage.Services!.ToList();
-
-        foreach(var item in model)
+        var services = await _unitOfWork.Services.Get(b => serviceIds.Contains(b.Id)).ToListAsync();
+        if (services.IsNullOrEmpty())
         {
-            if (item.IsDeleted)
+            return new ServiceResponse
             {
-                var existedService = services.Where(s => s.Id == item.ServiceId).FirstOrDefault();
-                if(existedService is null)
-                {
-                    return new ServiceResponse
-                    {
-                        IsSuccess = false,
-                        Message = $"Không tìm thấy dịch vụ",
-                        Error = new List<string>() { $"Can not find service with id '{item.ServiceId}' in service package '{existedServicePackage.ServicePackageName}'" }
-                    };
-                }
-                services.Remove(existedService);
-            }
-            else
-            {
-                var existedService = await _unitOfWork.Services.FindAsync(item.ServiceId);
-                if (existedService == null)
-                {
-                    return new ServiceResponse
-                    {
-                        IsSuccess = false,
-                        Message = "Không tìm thấy dịch vụ",
-                        Error = new List<string>() { "Can not find service with the given id: " + item.ServiceId }
-                    };
-                }
-                services.Add(existedService);
-            }
+                IsSuccess = false,
+                Message = "Không tìm thấy danh sách dịch vụ",
+                Error = new List<string>() { "List of service is null or empty" }
+            };
         }
 
         existedServicePackage.Services = services;
@@ -207,6 +156,15 @@ internal class ServicePackageService : IServicePackageService
         var existedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.ServicePackageName == servicePackage.ServicePackageName).AsNoTracking().FirstOrDefaultAsync();
         if(existedServicePackage != null)
         {
+            if(existedServicePackage.IsDeleted == true)
+            {
+                throw new CustomException("Gói dịch vụ đã tồn tại")
+                {
+                    Errors = new List<string>() { $"Service package '{servicePackage.ServicePackageName}' already exists but has been deleted, you need to restored it" },
+                    IsRestored = true
+                };
+            }
+
             throw new CustomException($"Gói dịch vụ '{existedServicePackage.ServicePackageName}' đã tồn tại")
             {
                 Errors = new List<string>() { $"Service package '{existedServicePackage.ServicePackageName}' already exist" }
@@ -324,6 +282,45 @@ internal class ServicePackageService : IServicePackageService
                 IsSuccess = false,
                 Message = "Xóa thất bại",
                 Error = new List<string>() { "Maybe nothing has been changed", "Maybe error from server" }
+            };
+        }
+    }
+
+    public async Task<ServiceResponse> RestoreServicePackage(int id)
+    {
+        var deletedServicePackage = await _unitOfWork.ServicePackages.Get(sp => sp.Id == id && sp.IsDeleted).FirstOrDefaultAsync();
+        if (deletedServicePackage is null)
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy gói dịch vụ đã xóa",
+                Error = new List<string>() { "Can not find deleted service package with the given id: " + id }
+            };
+        }
+        deletedServicePackage.IsDeleted = false;
+
+        var log = await _unitOfWork.AuditLogs.Get(l => l.PrimaryKey == id.ToString() && l.Type == 3 && l.IsRestored != true && l.TableName == nameof(ServicePackage)).FirstOrDefaultAsync();
+        if (log is not null)
+        {
+            log.IsRestored = true;
+        }
+
+        if (await _unitOfWork.SaveChangesNoLogAsync())
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = true,
+                Message = "Khôi phục thành công"
+            };
+        }
+        else
+        {
+            return new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
+                Error = new List<string>() { "Maybe there is error from server", "Maybe there is no change made" }
             };
         }
     }

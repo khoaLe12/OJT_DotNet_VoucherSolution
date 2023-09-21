@@ -228,25 +228,13 @@ public class UpdatedServicePackageVM
     public string? Description { get; set; }
 }
 
-public class UpdatedServicesInPackageVM
-{
-    public int ServiceId { get; set; }
-    public bool IsDeleted { get; set; }
-}
-
-public class UpdatedVoucherTypesInPackageVM
-{
-    public int VoucherTypeId { get; set; }
-    public bool IsDeleted { get; set; }
-}
-
 //============================================================
 
 public class VoucherTypeVM
 {
     [Required]
     public string? TypeName { get; set; }
-    public bool IsActiveNow { get; set; } = false;
+    public bool IsAvailable { get; set; } = false;
     [Required]
     public Decimal CommonPrice { get; set; }
     public int AvailableNumberOfVouchers { get; set; } = 0;
@@ -317,4 +305,13 @@ public class MailMessageVM
     public string Content { get; set; } = "No Content";
     public IFormFileCollection? Files { get; set; }
     //IEnumerable<IFormFile>
+}
+
+//=====================================================
+
+public class SchedulesVoucherTypeVM
+{
+    public int Id { get; set; }
+    public DateTime? From { get; set; }
+    public DateTime To { get; set; }
 }

@@ -101,6 +101,40 @@ public class VoucherController : ControllerBase
         }
     }
 
+    [Authorize(Policy = "Read")]
+    [HttpGet("User/{userId}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> GetAllVoucherOfUserByid(Guid userId)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherService.GetAllVoucherOfUserById(userId);
+                return Ok(_mapper.Map<IEnumerable<ResponseVoucherVM>>(result));
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (ArgumentNullException ex)
+        {
+            return BadRequest(new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Không tìm thấy người dùng",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
     [Authorize(Policy = "Customer")]
     [HttpGet("Customer")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ResponseVoucherVM>))]
@@ -374,6 +408,48 @@ public class VoucherController : ControllerBase
             {
                 IsSuccess = false,
                 Message = "Cập nhật thất bại",
+                Error = new List<string>() { ex.Message }
+            });
+        }
+    }
+
+    [Authorize(Policy = "Restore")]
+    [HttpPatch("restore-voucher/{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ServiceResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ServiceResponse))]
+    public async Task<IActionResult> RestoreVoucher(int id)
+    {
+        try
+        {
+            if (ModelState.IsValid)
+            {
+                var result = await _voucherService.RestoreVoucher(id);
+                if (result.IsSuccess)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            else
+            {
+                return BadRequest(new ServiceResponse
+                {
+                    IsSuccess = false,
+                    Message = "Dữ liệu không hợp lệ",
+                    Error = new List<string>() { "Invalid input" }
+                });
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new ServiceResponse
+            {
+                IsSuccess = false,
+                Message = "Khôi phục thất bại",
                 Error = new List<string>() { ex.Message }
             });
         }
